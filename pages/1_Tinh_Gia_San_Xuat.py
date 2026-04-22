@@ -16,7 +16,7 @@ tab_tinh_toan, tab_danh_sach, tab_ghep_bo = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (GIỮ NGUYÊN 100%)
+# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (GIỮ NGUYÊN)
 # ==========================================
 with tab_tinh_toan:
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
@@ -97,7 +97,6 @@ with tab_tinh_toan:
         
         st.write("---")
         
-        # --- NÚT LƯU SẢN PHẨM ---
         if st.button("💾 LƯU SẢN PHẨM NÀY", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
                 st.warning("⚠️ Vui lòng nhập Mã và Tên sản phẩm!")
@@ -114,7 +113,7 @@ with tab_tinh_toan:
                 st.success(f"✅ Đã lưu: {ten_sp}")
 
 # ==========================================
-# TAB 2: DANH SÁCH SẢN PHẨM (GIỮ NGUYÊN 100%)
+# TAB 2: DANH SÁCH SẢN PHẨM (GIỮ NGUYÊN)
 # ==========================================
 with tab_danh_sach:
     st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ")
@@ -138,7 +137,7 @@ with tab_danh_sach:
 
 
 # ==========================================
-# TAB 3: GHÉP BỘ (ĐỒNG BỘ GIAO DIỆN NHƯ TAB 1)
+# TAB 3: GHÉP BỘ (KHÔI PHỤC THEO ẢNH 1 - CÓ CHỮ "BỘ")
 # ==========================================
 with tab_ghep_bo:
     st.subheader("🧩 GHÉP BỘ SẢN PHẨM")
@@ -157,13 +156,11 @@ with tab_ghep_bo:
             
             # NHÁNH 2: BỘ PHẬN GHÉP 
             with st.expander("⚙️ NHÁNH 2: BỘ PHẬN GHÉP", expanded=True):
-                # Lấy danh sách tên sản phẩm đã lưu ở Tab 1
                 ds_ten = [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_sp]
                 
                 chon_than = st.selectbox("Mục bộ phận thân:", ds_ten, key="sb_than")
                 chon_nap = st.selectbox("Mục bộ phận nắp:", ds_ten, key="sb_nap")
                 
-                # Tìm giá vốn tương ứng
                 von_than = next(s["Giá Vốn"] for s in st.session_state.danh_sach_sp if s["Tên Sản Phẩm"] == chon_than)
                 von_nap = next(s["Giá Vốn"] for s in st.session_state.danh_sach_sp if s["Tên Sản Phẩm"] == chon_nap)
                 
@@ -183,8 +180,8 @@ with tab_ghep_bo:
             st.subheader("📊 KẾT QUẢ TÍNH GIÁ")
             
             # --- PHẦN 1: GIÁ ĐẠI LÝ BỘ ---
-            st.markdown("### **Giá Đại Lý**")
-            hs_dl_bo = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl_bo")
+            st.markdown("### **Giá Đại Lý (Bộ)**")
+            hs_dl_bo = st.number_input("Hệ số LN ĐL (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl_bo")
             gia_dl_bo = gvhb_bo / hs_dl_bo
             tien_ln_dl_bo = gia_dl_bo - gvhb_bo
             
@@ -195,8 +192,8 @@ with tab_ghep_bo:
             st.write("---")
             
             # --- PHẦN 2: GIÁ TIÊU CHUẨN BỘ ---
-            st.markdown("### **Giá Tiêu Chuẩn**")
-            hs_tc_bo = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
+            st.markdown("### **Giá Tiêu Chuẩn (Bộ)**")
+            hs_tc_bo = st.number_input("Hệ số LN TC (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
             gia_tc_bo = gia_dl_bo / hs_tc_bo
             tien_ln_tc_bo = gia_tc_bo - gvhb_bo
             
@@ -207,7 +204,7 @@ with tab_ghep_bo:
             st.write("---")
             
             # --- PHẦN 3: CHỐT GIÁ BỘ ---
-            st.markdown("### **Chốt Giá**")
+            st.markdown("### **Chốt Giá Bộ**")
             gia_chot_bo = st.number_input("Nhập giá chốt bán thực tế (VNĐ)", min_value=0, value=int(round(gia_dl_bo)), step=100, key="chot_bo")
 
             st.write("---")
