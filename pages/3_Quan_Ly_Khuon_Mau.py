@@ -171,6 +171,7 @@ with tab_A:
     filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_a")
     df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
     pdf_a = export_pdf(df_export_a, f"BAO CAO NGUYEN VAT LIEU - {filter_pdf_a}")
+    # Đã sửa lỗi thiếu tham số file_name= ở đây
     col_pdf2.download_button(label="Tải file PDF", data=pdf_a, file_name=f"WANCHI_NVL_{filter_pdf_a}.pdf", mime="application/pdf")
 
 # ------------------------------------------
@@ -221,6 +222,7 @@ with tab_B:
     filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_b")
     df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
     pdf_b = export_pdf(df_export_b, f"BAO CAO GIA CONG - {filter_pdf_b}")
+    # Đã sửa lỗi thiếu tham số file_name= ở đây
     col_pdf4.download_button(label="Tải file PDF", data=pdf_b, file_name=f"WANCHI_GiaCong_{filter_pdf_b}.pdf", mime="application/pdf")
 
 # ------------------------------------------
@@ -260,6 +262,7 @@ with tab_C:
     filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_c")
     df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
     pdf_c = export_pdf(df_export_c, f"BAO CAO VAT TU - {filter_pdf_c}")
+    # Đã sửa lỗi thiếu tham số file_name= ở đây
     col_pdf6.download_button(label="Tải file PDF", data=pdf_c, file_name=f"WANCHI_VatTu_{filter_pdf_c}.pdf", mime="application/pdf")
 
 # ------------------------------------------
@@ -310,8 +313,9 @@ with tab_D:
         
     st.markdown("---")
     st.subheader("📥 Xuất Báo Cáo PDF")
-    col_pdf1, col_pdf2 = st.columns([1, 2])
-    filter_pdf_d = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
+    col_pdf1_d, col_pdf2_d = st.columns([1, 2])
+    filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
     df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
     pdf_d = export_pdf(df_export_d, f"TONG HOP CHI PHI KHUON - {filter_pdf_d}")
-    col_pdf2.download_button(label="Tải file PDF", data=pdf_d, file_name=f"WANCHI_TongHop_{filter_pdf_d}.pdf", mime="application/pdf")
+    # Đã sửa lỗi thiếu tham số file_name= ở đây
+    col_pdf2_d.download_button(label="Tải file PDF", data=pdf_d, file_name=f"WANCHI_TongHop_{filter_pdf_d}.pdf", mime="application/pdf")
