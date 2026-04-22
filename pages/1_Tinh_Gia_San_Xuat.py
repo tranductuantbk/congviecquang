@@ -55,28 +55,44 @@ with tab_tinh_toan:
             khau_hao = gia_tri_khuon / sl_khuon_sx
             cp_khac = bao_bi + phu_kien + khau_hao
 
-    # --- LOGIC TÍNH TOÁN MỚI ---
+    # --- LOGIC TÍNH TOÁN ---
     gvhb = cp_nvl_1sp + cp_may_1sp + cp_khac
 
     with col_result:
         st.subheader("📊 KẾT QUẢ TÍNH GIÁ")
         
-        # Mục 1: Giá Đại Lý (GVHB / Hệ số 1)
-        st.info(f"**Giá vốn hàng bán (GVHB): {round(gvhb):,} VNĐ**")
-        hs_dl = st.number_input("Hệ số tính Giá Đại lý (Mặc định 0.6)", 
-                                min_value=0.01, max_value=1.0, value=0.6, step=0.01)
+        # --- PHẦN 1: GIÁ ĐẠI LÝ ---
+        st.markdown("### **Giá Đại Lý**")
+        hs_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl")
         gia_dai_ly = gvhb / hs_dl
-        st.metric(label="GIÁ ĐẠI LÝ", value=f"{round(gia_dai_ly):,} VNĐ")
+        tien_ln_dl = gia_dai_ly - gvhb
+        
+        st.metric(label="Giá Đại Lý", value=f"{round(gia_dai_ly):,} VNĐ")
+        # Thể hiện dòng giải thích như ảnh
+        st.markdown(f"<p style='color: #555; font-size: 0.9em; margin-bottom: 0px;'>Giá đại lý được tính bằng: {round(gvhb):,} / {hs_dl}</p>", unsafe_allow_html=True)
+        st.write(f"💰 Tiền lợi nhuận: **{round(tien_ln_dl):,} VNĐ**")
 
         st.write("---")
 
-        # Mục 2: Giá Tiêu Chuẩn (Giá Đại Lý / Hệ số 2)
-        hs_tc = st.number_input("Hệ số tính Giá Tiêu chuẩn (Mặc định 0.6)", 
-                                min_value=0.01, max_value=1.0, value=0.6, step=0.01)
+        # --- PHẦN 2: GIÁ TIÊU CHUẨN ---
+        st.markdown("### **Giá Tiêu Chuẩn**")
+        hs_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc")
         gia_tieu_chuan = gia_dai_ly / hs_tc
-        st.metric(label="GIÁ TIÊU CHUẨN", value=f"{round(gia_tieu_chuan):,} VNĐ")
+        tien_ln_tc = gia_tieu_chuan - gvhb
+        
+        st.metric(label="Giá Tiêu Chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
+        # Thể hiện dòng giải thích như ảnh
+        st.markdown(f"<p style='color: #555; font-size: 0.9em; margin-bottom: 0px;'>Giá tiêu chuẩn được tính bằng: {round(gia_dai_ly):,} / {hs_tc}</p>", unsafe_allow_html=True)
+        st.write(f"💰 Tiền lợi nhuận: **{round(tien_ln_tc):,} VNĐ**")
         
         st.write("---")
+
+        # --- PHẦN 3: CHỐT GIÁ ---
+        st.markdown("### **Chốt Giá**")
+        gia_chot = st.number_input("Nhập giá chốt bán thực tế (VNĐ)", min_value=0, value=int(round(gia_dai_ly)), step=100)
+        
+        st.write("---")
+        
         # Nút Lưu
         if st.button("💾 LƯU SẢN PHẨM NÀY", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
@@ -87,7 +103,8 @@ with tab_tinh_toan:
                     "Tên Sản Phẩm": ten_sp,
                     "Giá Vốn": round(gvhb),
                     "Giá Đại Lý": round(gia_dai_ly),
-                    "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
+                    "Giá Tiêu Chuẩn": round(gia_tieu_chuan),
+                    "Giá Chốt": gia_chot
                 }
                 st.session_state.danh_sach_sp.append(san_pham_moi)
                 st.success(f"✅ Đã lưu: {ten_sp}")
@@ -106,6 +123,7 @@ with tab_danh_sach:
                 "Giá Vốn": st.column_config.NumberColumn("Giá Vốn", format="%d ₫"),
                 "Giá Đại Lý": st.column_config.NumberColumn("Giá Đại Lý", format="%d ₫"),
                 "Giá Tiêu Chuẩn": st.column_config.NumberColumn("Giá Tiêu Chuẩn", format="%d ₫"),
+                "Giá Chốt": st.column_config.NumberColumn("Giá Chốt", format="%d ₫"),
             }
         )
         if st.button("🗑️ Xóa toàn bộ danh sách"):
