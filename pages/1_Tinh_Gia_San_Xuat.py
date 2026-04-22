@@ -43,7 +43,7 @@ with tab_tinh_toan:
             sl_ca = (8 * 3600 / chu_ky) * sp_khuon
             cp_may_1sp = gia_may_ca / sl_ca if sl_ca > 0 else 0
 
-        # Nhánh 3: Chi phí khác & Khấu hao (CẬP NHẬT MỚI)
+        # Nhánh 3: Chi phí khác & Khấu hao
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC & KHẤU HAO", expanded=True):
             bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=10)
             phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=100)
@@ -53,27 +53,36 @@ with tab_tinh_toan:
             gia_tri_khuon = ck1.number_input("Giá trị khuôn (VNĐ)", min_value=0, value=0, step=1000000)
             sl_khuon_sx = ck2.number_input("SL khuôn sản xuất (Cái)", min_value=1, value=10000)
             
-            # Logic: Khấu hao = Giá trị khuôn / Số lượng sản xuất
             khau_hao = gia_tri_khuon / sl_khuon_sx
             st.caption(f"💡 Khấu hao dự kiến: {khau_hao:,.2f} VNĐ/SP")
             cp_khac = bao_bi + phu_kien + khau_hao
 
-    # --- TÍNH TOÁN (CẬP NHẬT LOGIC MỚI) ---
+    # --- TÍNH TOÁN CƠ BẢN ---
     gvhb = cp_nvl_1sp + cp_may_1sp + cp_khac
 
     with col_result:
         st.subheader("📊 KẾT QUẢ TÍNH GIÁ")
         
-        # 2. Chuyển gạch đỏ thành mục nhập số liệu (Hệ số lợi nhuận)
-        he_so_ln = st.number_input("Hệ số lợi nhuận mong muốn (Mặc định 0.6)", 
-                                   min_value=0.01, max_value=1.0, value=0.6, step=0.01)
-        
-        # 3. Tính Giá Đại Lý theo công thức: GVHB / Hệ số
-        gia_dai_ly = gvhb / he_so_ln
+        # PHẦN 1: GIÁ BÁN DỰ KIẾN (CHÍNH)
+        he_so_ln = st.number_input("Lợi nhuận mong muốn (Hệ số chia, mặc định 0.6)", 
+                                   min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_chinh")
+        gia_ban_chinh = gvhb / he_so_ln
+        st.metric(label="GIÁ BÁN DỰ KIẾN", value=f"{round(gia_ban_chinh):,} VNĐ")
 
-        st.metric(label="GIÁ ĐẠI LÝ DỰ KIẾN", value=f"{round(gia_dai_ly):,} VNĐ")
+        # PHẦN 2: GIÁ ĐẠI LÝ (THEO ẢNH)
+        st.markdown("### **Giá Đại Lý**")
+        he_so_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.7, step=0.01, key="hs_dl")
+        gia_dai_ly = gvhb / he_so_dl
+        st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
+
+        # PHẦN 3: GIÁ TIÊU CHUẨN (THEO ẢNH)
+        st.markdown("### **Giá tiêu chuẩn**")
+        he_so_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.8, step=0.01, key="hs_tc")
+        gia_tieu_chuan = gvhb / he_so_tc
+        st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
         
-        st.markdown("**Phân tích chi phí vốn:**")
+        st.write("---")
+        st.markdown("**Phân tích giá thành:**")
         df_logic = pd.DataFrame({
             "Hạng mục": ["Nguyên Vật Liệu", "Máy sản xuất", "Bao bì & Phụ kiện", "Khấu hao khuôn", "GIÁ VỐN (GVHB)"],
             "Số tiền (VNĐ)": [
@@ -85,8 +94,6 @@ with tab_tinh_toan:
             ]
         })
         st.table(df_logic)
-        
-        st.info(f"💡 Giá đại lý được tính bằng: {round(gvhb):,} / {he_so_ln}")
 
         # --- NÚT LƯU SẢN PHẨM ---
         if st.button("💾 LƯU SẢN PHẨM NÀY", use_container_width=True):
@@ -96,9 +103,10 @@ with tab_tinh_toan:
                 san_pham_moi = {
                     "Mã SP": ma_sp,
                     "Tên Sản Phẩm": ten_sp,
-                    "Giá Vốn (GVHB)": round(gvhb),
-                    "Hệ số LN": he_so_ln,
-                    "GIÁ ĐẠI LÝ": round(gia_dai_ly)
+                    "Giá Vốn": round(gvhb),
+                    "Giá Bán Dự Kiến": round(gia_ban_chinh),
+                    "Giá Đại Lý": round(gia_dai_ly),
+                    "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
                 }
                 st.session_state.danh_sach_sp.append(san_pham_moi)
                 st.success(f"✅ Đã lưu: {ten_sp}")
@@ -107,15 +115,17 @@ with tab_tinh_toan:
 # TAB 2: DANH SÁCH SẢN PHẨM ĐÃ LƯU
 # ==========================================
 with tab_danh_sach:
-    st.subheader("📋 BẢNG TỔNG HỢP GIÁ ĐẠI LÝ")
+    st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ")
     if len(st.session_state.danh_sach_sp) > 0:
         df_danh_sach = pd.DataFrame(st.session_state.danh_sach_sp)
         st.dataframe(
             df_danh_sach, 
             use_container_width=True,
             column_config={
-                "Giá Vốn (GVHB)": st.column_config.NumberColumn("Giá Vốn", format="%d ₫"),
-                "GIÁ ĐẠI LÝ": st.column_config.NumberColumn("Giá Đại Lý", format="%d ₫"),
+                "Giá Vốn": st.column_config.NumberColumn("Giá Vốn", format="%d ₫"),
+                "Giá Bán Dự Kiến": st.column_config.NumberColumn("Giá Bán", format="%d ₫"),
+                "Giá Đại Lý": st.column_config.NumberColumn("Giá Đại Lý", format="%d ₫"),
+                "Giá Tiêu Chuẩn": st.column_config.NumberColumn("Giá Tiêu Chuẩn", format="%d ₫"),
             }
         )
         if st.button("🗑️ Xóa toàn bộ danh sách"):
