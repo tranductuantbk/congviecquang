@@ -68,15 +68,13 @@ def export_pdf(df, title):
             
     return bytes(pdf.output())
 
-# Hàm tải dữ liệu từ Neon DB (AN TOÀN - CHỐNG SẬP APP)
+# Hàm tải dữ liệu từ Neon DB
 def load_data(table_name, columns):
     try:
-        # Dò xem bảng đã được tạo trên Neon chưa
         inspector = inspect(conn.engine)
         if not inspector.has_table(table_name):
             return pd.DataFrame(columns=columns)
             
-        # Thêm ttl=0 để bỏ qua cache, luôn luôn lấy dữ liệu mới nhất
         df = conn.query(f"SELECT * FROM {table_name}", ttl=0)
         if df.empty:
             return pd.DataFrame(columns=columns)
@@ -84,7 +82,7 @@ def load_data(table_name, columns):
     except Exception as e:
         return pd.DataFrame(columns=columns)
 
-# Hàm lưu dữ liệu lên Neon DB (BẮT LỖI)
+# Hàm lưu dữ liệu lên Neon DB
 def save_data(df, table_name):
     try:
         df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
@@ -171,8 +169,9 @@ with tab_A:
     filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_a")
     df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
     pdf_a = export_pdf(df_export_a, f"BAO CAO NGUYEN VAT LIEU - {filter_pdf_a}")
-    # Đã sửa lỗi thiếu tham số file_name= ở đây
-    col_pdf2.download_button(label="Tải file PDF", data=pdf_a, file_name=f"WANCHI_NVL_{filter_pdf_a}.pdf", mime="application/pdf")
+    
+    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
+    col_pdf2.download_button("Tải file PDF", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE B: GIA CÔNG
@@ -222,8 +221,9 @@ with tab_B:
     filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_b")
     df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
     pdf_b = export_pdf(df_export_b, f"BAO CAO GIA CONG - {filter_pdf_b}")
-    # Đã sửa lỗi thiếu tham số file_name= ở đây
-    col_pdf4.download_button(label="Tải file PDF", data=pdf_b, file_name=f"WANCHI_GiaCong_{filter_pdf_b}.pdf", mime="application/pdf")
+    
+    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
+    col_pdf4.download_button("Tải file PDF", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE C: VẬT TƯ
@@ -262,8 +262,9 @@ with tab_C:
     filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_c")
     df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
     pdf_c = export_pdf(df_export_c, f"BAO CAO VAT TU - {filter_pdf_c}")
-    # Đã sửa lỗi thiếu tham số file_name= ở đây
-    col_pdf6.download_button(label="Tải file PDF", data=pdf_c, file_name=f"WANCHI_VatTu_{filter_pdf_c}.pdf", mime="application/pdf")
+    
+    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
+    col_pdf6.download_button("Tải file PDF", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
@@ -317,5 +318,6 @@ with tab_D:
     filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
     df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
     pdf_d = export_pdf(df_export_d, f"TONG HOP CHI PHI KHUON - {filter_pdf_d}")
-    # Đã sửa lỗi thiếu tham số file_name= ở đây
-    col_pdf2_d.download_button(label="Tải file PDF", data=pdf_d, file_name=f"WANCHI_TongHop_{filter_pdf_d}.pdf", mime="application/pdf")
+    
+    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
+    col_pdf2_d.download_button("Tải file PDF", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
