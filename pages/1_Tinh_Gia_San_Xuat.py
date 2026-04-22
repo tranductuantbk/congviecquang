@@ -8,7 +8,7 @@ if 'danh_sach_sp' not in st.session_state:
 st.title("💰 MODULE: TÍNH GIÁ SẢN XUẤT")
 st.write("---")
 
-# --- TẠO 3 TAB (Thêm Tab 3 Ghép bộ) ---
+# --- TẠO 3 TAB RIÊNG BIỆT ---
 tab_tinh_toan, tab_danh_sach, tab_ghep_bo = st.tabs([
     "🧮 1. TÍNH TOÁN & NHẬP LIỆU", 
     "📋 2. DANH SÁCH SẢN PHẨM",
@@ -16,7 +16,7 @@ tab_tinh_toan, tab_danh_sach, tab_ghep_bo = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (Giữ nguyên)
+# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (Sản phẩm đơn lẻ)
 # ==========================================
 with tab_tinh_toan:
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
@@ -91,7 +91,7 @@ with tab_tinh_toan:
         
         st.write("---")
 
-        # --- PHẦN 3: CHỐT GIÁ ---
+        # --- PHẦN 3: CHỐT GIÁ (Đã khôi phục) ---
         st.markdown("### **Chốt Giá**")
         gia_chot = st.number_input("Nhập giá chốt bán thực tế (VNĐ)", min_value=0, value=int(round(gia_dai_ly)), step=100)
         
@@ -114,7 +114,7 @@ with tab_tinh_toan:
                 st.success(f"✅ Đã lưu: {ten_sp}")
 
 # ==========================================
-# TAB 2: DANH SÁCH SẢN PHẨM (Giữ nguyên)
+# TAB 2: DANH SÁCH SẢN PHẨM 
 # ==========================================
 with tab_danh_sach:
     st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ")
@@ -137,12 +137,11 @@ with tab_danh_sach:
         st.info("ℹ️ Chưa có dữ liệu sản phẩm.")
 
 # ==========================================
-# TAB 3: GHÉP BỘ (Yêu cầu mới)
+# TAB 3: GHÉP BỘ 
 # ==========================================
 with tab_ghep_bo:
     st.subheader("🧩 GHÉP BỘ SẢN PHẨM")
     
-    # Kiểm tra danh sách để có dữ liệu ghép
     if not st.session_state.danh_sach_sp:
         st.warning("⚠️ Vui lòng lưu các bộ phận lẻ ở Tab 1 trước khi thực hiện ghép bộ!")
     else:
@@ -154,15 +153,14 @@ with tab_ghep_bo:
         
         with col_in_ghep:
             st.subheader("📥 THÔNG SỐ GHÉP")
-            # Nhánh 2: Bộ phận ghép (Bỏ nhánh 1)
+            
+            # Nhánh 2: Bộ phận ghép 
             with st.expander("⚙️ NHÁNH 2: BỘ PHẬN GHÉP", expanded=True):
-                # Lấy danh sách tên sản phẩm đã lưu
                 list_sp_names = [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_sp]
                 
                 chon_than = st.selectbox("Mục bộ phận thân:", list_sp_names, key="than_ghep")
                 chon_nap = st.selectbox("Mục bộ phận nắp:", list_sp_names, key="nap_ghep")
                 
-                # Truy xuất giá vốn từ danh sách
                 gia_von_than = next(s["Giá Vốn"] for s in st.session_state.danh_sach_sp if s["Tên Sản Phẩm"] == chon_than)
                 gia_von_nap = next(s["Giá Vốn"] for s in st.session_state.danh_sach_sp if s["Tên Sản Phẩm"] == chon_nap)
                 
@@ -175,22 +173,38 @@ with tab_ghep_bo:
                 cong_ghep = st.number_input("Công lắp ghép (VNĐ)", value=1000, key="cong_ghep")
                 cp_khac_bo = bb_bo + pk_bo + cong_ghep
 
-            # Tổng vốn bộ ghép
             gvhb_bo = gia_von_than + gia_von_nap + cp_khac_bo
 
         with col_res_ghep:
             st.subheader("📊 KẾT QUẢ BỘ GHÉP")
-            # Logic tính giá bộ giống sản phẩm lẻ
+            
+            # Giá Đại Lý Bộ
             hs_dl_bo = st.number_input("Hệ số LN ĐL (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl_bo")
             gia_dl_bo = gvhb_bo / hs_dl_bo
+            tien_ln_dl_bo = gia_dl_bo - gvhb_bo
+            
             st.metric("Giá Đại Lý Bộ", f"{round(gia_dl_bo):,} VNĐ")
-            st.markdown(f"<p style='color: #555; font-size: 0.85em;'>Cách tính: {round(gvhb_bo):,} / {hs_dl_bo}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: #555; font-size: 0.85em; margin-bottom: 0px;'>Cách tính: {round(gvhb_bo):,} / {hs_dl_bo}</p>", unsafe_allow_html=True)
+            st.write(f"💰 Tiền lợi nhuận: **{round(tien_ln_dl_bo):,} VNĐ**")
             
             st.write("---")
+            
+            # Giá Tiêu Chuẩn Bộ
             hs_tc_bo = st.number_input("Hệ số LN TC (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
             gia_tc_bo = gia_dl_bo / hs_tc_bo
+            tien_ln_tc_bo = gia_tc_bo - gvhb_bo
+            
             st.metric("Giá Tiêu Chuẩn Bộ", f"{round(gia_tc_bo):,} VNĐ")
-            st.markdown(f"<p style='color: #555; font-size: 0.85em;'>Cách tính: {round(gia_dl_bo):,} / {hs_tc_bo}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: #555; font-size: 0.85em; margin-bottom: 0px;'>Cách tính: {round(gia_dl_bo):,} / {hs_tc_bo}</p>", unsafe_allow_html=True)
+            st.write(f"💰 Tiền lợi nhuận: **{round(tien_ln_tc_bo):,} VNĐ**")
+            
+            st.write("---")
+            
+            # Chốt giá bộ
+            st.markdown("### **Chốt Giá Bộ**")
+            gia_chot_bo = st.number_input("Nhập giá chốt bán thực tế (VNĐ)", min_value=0, value=int(round(gia_dl_bo)), step=100, key="gia_chot_bo")
+
+            st.write("---")
 
             if st.button("💾 LƯU BỘ GHÉP NÀY", use_container_width=True):
                 if ma_bo and ten_bo:
@@ -200,6 +214,6 @@ with tab_ghep_bo:
                         "Giá Vốn": round(gvhb_bo),
                         "Giá Đại Lý": round(gia_dl_bo), 
                         "Giá Tiêu Chuẩn": round(gia_tc_bo),
-                        "Giá Chốt": round(gia_dl_bo)
+                        "Giá Chốt": gia_chot_bo
                     })
                     st.success(f"✅ Đã lưu bộ ghép: {ten_bo}")
