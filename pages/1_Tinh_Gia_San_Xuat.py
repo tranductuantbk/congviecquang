@@ -1,14 +1,54 @@
 import streamlit as st
 import pandas as pd
+from sqlalchemy import inspect
 
-# --- KHỞI TẠO BỘ NHỚ LƯU TRỮ ---
+# --- CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Tính Giá Sản Xuất", layout="wide")
+
+# ==========================================
+# KẾT NỐI NEON (POSTGRESQL) & XỬ LÝ DỮ LIỆU
+# ==========================================
+try:
+    conn = st.connection("postgresql", type="sql")
+except Exception as e:
+    st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
+    st.stop()
+
+# Hàm tải dữ liệu từ máy chủ xuống
+def load_data():
+    try:
+        inspector = inspect(conn.engine)
+        if not inspector.has_table("wanchi_sanpham"):
+            return []
+        df = conn.query("SELECT * FROM wanchi_sanpham", ttl=0)
+        if df.empty:
+            return []
+        return df.to_dict('records') # Chuyển đổi thành List để Streamlit dễ xử lý
+    except Exception as e:
+        return []
+
+# Hàm đồng bộ dữ liệu lên máy chủ
+def save_data(data_list):
+    try:
+        df = pd.DataFrame(data_list)
+        if df.empty:
+            # Tạo bảng khung nếu danh sách trống để tránh lỗi DB
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"])
+        df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi đồng bộ lên đám mây: {e}")
+
+# --- KHỞI TẠO BỘ NHỚ LƯU TRỮ (Lấy dữ liệu từ Neon) ---
 if 'danh_sach_sp' not in st.session_state:
-    st.session_state.danh_sach_sp = []
+    st.session_state.danh_sach_sp = load_data()
 
+# ==========================================
+# GIAO DIỆN CHÍNH
+# ==========================================
 st.title("💰 MODULE: TÍNH GIÁ SẢN XUẤT")
 st.write("---")
 
-# --- TẠO 3 TAB (Thêm Tab 3: Ghép bộ là bản sao của Tab 1) ---
+# --- TẠO 3 TAB ---
 tab_tinh_toan, tab_danh_sach, tab_ghep_bo = st.tabs([
     "🧮 1. TÍNH TOÁN & NHẬP LIỆU", 
     "📋 2. DANH SÁCH SẢN PHẨM",
@@ -16,7 +56,7 @@ tab_tinh_toan, tab_danh_sach, tab_ghep_bo = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (GIỮ NGUYÊN)
+# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU
 # ==========================================
 with tab_tinh_toan:
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
@@ -57,7 +97,7 @@ with tab_tinh_toan:
             gia_tri_khuon = ck1.number_input("Giá trị khuôn (VNĐ)", min_value=0, value=0, step=1000000)
             sl_khuon_sx = ck2.number_input("SL khuôn sản xuất (Cái)", min_value=1, value=10000)
             
-            khau_hao = gia_tri_khuon / sl_khuon_sx
+            khau_hao = gia_tri_khuon / sl_khuon_sx if sl_khuon_sx > 0 else 0
             st.caption(f"💡 Khấu hao dự kiến: {khau_hao:,.2f} VNĐ/SP")
             cp_khac = bao_bi + phu_kien + khau_hao
 
@@ -104,11 +144,13 @@ with tab_tinh_toan:
                     "Giá Đại Lý": round(gia_dai_ly),
                     "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
                 }
+                # Tích hợp thêm lệnh Lưu vào DB
                 st.session_state.danh_sach_sp.append(san_pham_moi)
-                st.success(f"✅ Đã lưu: {ten_sp}")
+                save_data(st.session_state.danh_sach_sp)
+                st.success(f"✅ Đã lưu lên đám mây: {ten_sp}")
 
 # ==========================================
-# TAB 2: DANH SÁCH SẢN PHẨM (GIỮ NGUYÊN)
+# TAB 2: DANH SÁCH SẢN PHẨM 
 # ==========================================
 with tab_danh_sach:
     st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ")
@@ -125,6 +167,8 @@ with tab_danh_sach:
         )
         if st.button("🗑️ Xóa toàn bộ danh sách"):
             st.session_state.danh_sach_sp = []
+            # Tích hợp xóa trên DB
+            save_data(st.session_state.danh_sach_sp)
             st.rerun()
     else:
         st.info("ℹ️ Chưa có dữ liệu sản phẩm.")
@@ -213,5 +257,7 @@ with tab_ghep_bo:
                     "Giá Đại Lý": round(gia_dl_bo),
                     "Giá Tiêu Chuẩn": round(gia_tc_bo)
                 }
+                # Tích hợp thêm lệnh Lưu vào DB
                 st.session_state.danh_sach_sp.append(san_pham_moi_bo)
-                st.success(f"✅ Đã lưu bộ ghép: {ten_bo}")
+                save_data(st.session_state.danh_sach_sp)
+                st.success(f"✅ Đã lưu bộ ghép lên đám mây: {ten_bo}")
