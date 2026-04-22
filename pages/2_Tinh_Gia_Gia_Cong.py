@@ -1,21 +1,57 @@
 import streamlit as st
 import pandas as pd
+from sqlalchemy import inspect
 
-# --- KHỞI TẠO BỘ NHỚ LƯU TRỮ RIÊNG CHO GIA CÔNG ---
+# --- CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Tính Giá Gia Công", layout="wide")
+
+# ==========================================
+# KẾT NỐI NEON (POSTGRESQL) & XỬ LÝ DỮ LIỆU
+# ==========================================
+try:
+    conn = st.connection("postgresql", type="sql")
+except Exception as e:
+    st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
+    st.stop()
+
+# Hàm tải dữ liệu gia công từ máy chủ xuống
+def load_data_gc():
+    try:
+        inspector = inspect(conn.engine)
+        if not inspector.has_table("wanchi_giacong"):
+            return []
+        df = conn.query("SELECT * FROM wanchi_giacong", ttl=0)
+        if df.empty:
+            return []
+        return df.to_dict('records')
+    except Exception as e:
+        return []
+
+# Hàm đồng bộ dữ liệu gia công lên máy chủ
+def save_data_gc(data_list):
+    try:
+        df = pd.DataFrame(data_list)
+        if df.empty:
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"])
+        df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi đồng bộ lên đám mây: {e}")
+
+# --- KHỞI TẠO BỘ NHỚ LƯU TRỮ TỪ NEON ---
 if 'danh_sach_gc' not in st.session_state:
-    st.session_state.danh_sach_gc = []
+    st.session_state.danh_sach_gc = load_data_gc()
 
 st.title("⚙️ MODULE: TÍNH GIÁ GIA CÔNG")
 st.write("---")
 
-# --- TẠO 2 TAB (Đã xóa Tab 3) ---
+# --- TẠO 2 TAB ---
 tab_tinh_toan, tab_danh_sach = st.tabs([
     "🧮 1. TÍNH TOÁN & NHẬP LIỆU", 
     "📋 2. DANH SÁCH GIA CÔNG"
 ])
 
 # ==========================================
-# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU (Đã xóa Khấu hao khuôn)
+# TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU 
 # ==========================================
 with tab_tinh_toan:
     st.subheader("📝 THÔNG TIN SẢN PHẨM GIA CÔNG")
@@ -46,7 +82,7 @@ with tab_tinh_toan:
             sl_ca = (8 * 3600 / chu_ky) * sp_khuon
             cp_may_1sp = gia_may_ca / sl_ca if sl_ca > 0 else 0
 
-        # Nhánh 3: Chi phí khác (Đã xóa phần tính Khấu hao khuôn)
+        # Nhánh 3: Chi phí khác
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC", expanded=True):
             bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=10)
             phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=100)
@@ -61,19 +97,18 @@ with tab_tinh_toan:
         
         # PHẦN 2: GIÁ ĐẠI LÝ
         st.markdown("### **Giá Đại Lý**")
-        he_so_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl")
-        gia_dai_ly = gvhb / he_so_dl
+        hs_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl")
+        gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
         # PHẦN 3: GIÁ TIÊU CHUẨN
         st.markdown("### **Giá tiêu chuẩn**")
-        he_so_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc")
-        gia_tieu_chuan = gia_dai_ly / he_so_tc
+        hs_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc")
+        gia_tieu_chuan = gia_dai_ly / hs_tc
         st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
         
         st.write("---")
         st.markdown("**Phân tích giá thành:**")
-        # Xóa "Khấu hao khuôn" khỏi bảng
         df_logic = pd.DataFrame({
             "Hạng mục": ["Nguyên Vật Liệu", "Máy sản xuất", "Bao bì & Phụ kiện", "GIÁ VỐN (GVHB)"],
             "Số tiền (VNĐ)": [
@@ -96,11 +131,13 @@ with tab_tinh_toan:
                     "Giá Đại Lý": round(gia_dai_ly),
                     "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
                 }
+                # Thêm vào danh sách và lưu lên DB
                 st.session_state.danh_sach_gc.append(san_pham_moi)
-                st.success(f"✅ Đã lưu: {ten_sp}")
+                save_data_gc(st.session_state.danh_sach_gc)
+                st.success(f"✅ Đã lưu lên đám mây: {ten_sp}")
 
 # ==========================================
-# TAB 2: DANH SÁCH SẢN PHẨM GIA CÔNG (GIỮ NGUYÊN)
+# TAB 2: DANH SÁCH SẢN PHẨM GIA CÔNG
 # ==========================================
 with tab_danh_sach:
     st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ GIA CÔNG")
@@ -117,6 +154,8 @@ with tab_danh_sach:
         )
         if st.button("🗑️ Xóa toàn bộ danh sách"):
             st.session_state.danh_sach_gc = []
+            # Đồng bộ xóa với DB
+            save_data_gc(st.session_state.danh_sach_gc)
             st.rerun()
     else:
         st.info("ℹ️ Chưa có dữ liệu sản phẩm gia công.")
