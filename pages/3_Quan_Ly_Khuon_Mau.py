@@ -3,6 +3,7 @@ import pandas as pd
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
+from sqlalchemy import inspect
 
 # ==========================================
 # CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
@@ -10,7 +11,11 @@ from datetime import datetime
 st.set_page_config(page_title="WANCHI - Quản Lý Khuôn Mẫu", layout="wide")
 
 # Khởi tạo kết nối đến CSDL Neon
-conn = st.connection("postgresql", type="sql")
+try:
+    conn = st.connection("postgresql", type="sql")
+except Exception as e:
+    st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
+    st.stop()
 
 def remove_accents(input_str):
     s = str(input_str).replace('Đ', 'D').replace('đ', 'd')
@@ -63,21 +68,28 @@ def export_pdf(df, title):
             
     return bytes(pdf.output())
 
-# Hàm tải dữ liệu từ Neon DB
+# Hàm tải dữ liệu từ Neon DB (AN TOÀN - CHỐNG SẬP APP)
 def load_data(table_name, columns):
     try:
-        df = conn.query(f"SELECT * FROM {table_name}")
+        # Dò xem bảng đã được tạo trên Neon chưa
+        inspector = inspect(conn.engine)
+        if not inspector.has_table(table_name):
+            return pd.DataFrame(columns=columns)
+            
+        # Thêm ttl=0 để bỏ qua cache, luôn luôn lấy dữ liệu mới nhất
+        df = conn.query(f"SELECT * FROM {table_name}", ttl=0)
         if df.empty:
             return pd.DataFrame(columns=columns)
         return df
-    except:
-        # Nếu bảng chưa được tạo trên Neon, trả về bảng trống
+    except Exception as e:
         return pd.DataFrame(columns=columns)
 
-# Hàm lưu dữ liệu lên Neon DB (Ghi đè bảng)
+# Hàm lưu dữ liệu lên Neon DB (BẮT LỖI)
 def save_data(df, table_name):
-    # Sử dụng engine của SQLAlchemy để lưu dataframe thẳng thành Table trong Postgres
-    df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
+    try:
+        df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
 # ==========================================
 # KHỞI TẠO DỮ LIỆU TỪ DB & XỬ LÝ CỘT
@@ -88,7 +100,6 @@ df_A = load_data("wanchi_a", cols_A)
 cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
 
-# Sửa cột nếu bản ghi cũ khác chuẩn
 if "Đơn giá" in df_B.columns:
     df_B.rename(columns={"Đơn giá": "Ráp khuôn hoàn thiện"}, inplace=True)
 if "Dọn phôi" not in df_B.columns:
