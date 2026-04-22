@@ -4,6 +4,7 @@ from fpdf import FPDF
 import unicodedata
 from datetime import datetime
 from sqlalchemy import inspect
+import os
 
 # ==========================================
 # CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
@@ -22,6 +23,7 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
+# ---> ĐÃ ĐỔI CÁCH XỬ LÝ XUẤT PDF AN TOÀN TUYỆT ĐỐI <---
 def export_pdf(df, title):
     pdf = FPDF(orientation='L')
     pdf.add_page()
@@ -66,7 +68,17 @@ def export_pdf(df, title):
                     pdf.cell(col_width, 10, txt="", border=1, fill=True) 
             pdf.ln()
             
-    return bytes(pdf.output())
+    # CÁCH KHÁC: Ghi trực tiếp ra file vật lý rồi đọc ngược lại thành Bytes (Chống lỗi Crash FPDF)
+    temp_filename = "temp_report.pdf"
+    pdf.output(temp_filename)
+    
+    with open(temp_filename, "rb") as f:
+        pdf_bytes = f.read()
+        
+    if os.path.exists(temp_filename):
+        os.remove(temp_filename) # Xóa file rác sau khi đọc xong
+        
+    return pdf_bytes
 
 # Hàm tải dữ liệu từ Neon DB
 def load_data(table_name, columns):
@@ -167,11 +179,16 @@ with tab_A:
     st.subheader("📥 Xuất Báo Cáo PDF")
     col_pdf1, col_pdf2 = st.columns([1, 2])
     filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_a")
-    df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
-    pdf_a = export_pdf(df_export_a, f"BAO CAO NGUYEN VAT LIEU - {filter_pdf_a}")
     
-    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
-    col_pdf2.download_button("Tải file PDF", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
+    if st.button("Tạo file PDF (Module A)"):
+        df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
+        pdf_a = export_pdf(df_export_a, f"BAO CAO NGUYEN VAT LIEU - {filter_pdf_a}")
+        col_pdf2.download_button(
+            label="⬇️ Nhấn để Tải PDF Xuống", 
+            data=pdf_a, 
+            file_name=f"WANCHI_NVL_{filter_pdf_a}.pdf", 
+            mime="application/pdf"
+        )
 
 # ------------------------------------------
 # MODULE B: GIA CÔNG
@@ -219,11 +236,16 @@ with tab_B:
     st.subheader("📥 Xuất Báo Cáo PDF")
     col_pdf3, col_pdf4 = st.columns([1, 2])
     filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_b")
-    df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
-    pdf_b = export_pdf(df_export_b, f"BAO CAO GIA CONG - {filter_pdf_b}")
     
-    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
-    col_pdf4.download_button("Tải file PDF", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
+    if st.button("Tạo file PDF (Module B)"):
+        df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
+        pdf_b = export_pdf(df_export_b, f"BAO CAO GIA CONG - {filter_pdf_b}")
+        col_pdf4.download_button(
+            label="⬇️ Nhấn để Tải PDF Xuống", 
+            data=pdf_b, 
+            file_name=f"WANCHI_GiaCong_{filter_pdf_b}.pdf", 
+            mime="application/pdf"
+        )
 
 # ------------------------------------------
 # MODULE C: VẬT TƯ
@@ -260,11 +282,16 @@ with tab_C:
     st.subheader("📥 Xuất Báo Cáo PDF")
     col_pdf5, col_pdf6 = st.columns([1, 2])
     filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_c")
-    df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
-    pdf_c = export_pdf(df_export_c, f"BAO CAO VAT TU - {filter_pdf_c}")
     
-    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
-    col_pdf6.download_button("Tải file PDF", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
+    if st.button("Tạo file PDF (Module C)"):
+        df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
+        pdf_c = export_pdf(df_export_c, f"BAO CAO VAT TU - {filter_pdf_c}")
+        col_pdf6.download_button(
+            label="⬇️ Nhấn để Tải PDF Xuống", 
+            data=pdf_c, 
+            file_name=f"WANCHI_VatTu_{filter_pdf_c}.pdf", 
+            mime="application/pdf"
+        )
 
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
@@ -316,8 +343,13 @@ with tab_D:
     st.subheader("📥 Xuất Báo Cáo PDF")
     col_pdf1_d, col_pdf2_d = st.columns([1, 2])
     filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
-    df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
-    pdf_d = export_pdf(df_export_d, f"TONG HOP CHI PHI KHUON - {filter_pdf_d}")
     
-    # Cách sửa mới: Bỏ từ khóa, dùng truyền vị trí thuần túy
-    col_pdf2_d.download_button("Tải file PDF", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
+    if st.button("Tạo file PDF (Module D)"):
+        df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
+        pdf_d = export_pdf(df_export_d, f"TONG HOP CHI PHI KHUON - {filter_pdf_d}")
+        col_pdf2_d.download_button(
+            label="⬇️ Nhấn để Tải PDF Xuống", 
+            data=pdf_d, 
+            file_name=f"WANCHI_TongHop_{filter_pdf_d}.pdf", 
+            mime="application/pdf"
+        )
