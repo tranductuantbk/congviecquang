@@ -1,25 +1,41 @@
 import streamlit as st
 
-# Cấu hình toàn bộ ứng dụng (chỉ được gọi 1 lần ở trang chủ)
-st.set_page_config(
-    page_title="Công Việc Quang",
-    page_icon="💼",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Hệ Thống WANCHI", layout="centered")
 
-# Hiển thị tiêu đề
-st.title("🚀 QUẢN LÝ CÔNG VIỆC CỦA QUANG")
-st.markdown("---")
+# Khởi tạo bộ nhớ đăng nhập
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-# Nội dung chào mừng
-st.markdown("""
-### Chào mừng Quang đến với Hệ thống Quản lý Cá nhân!
-Đây là trung tâm điều hành mọi công việc. Hệ thống được thiết kế theo cấu trúc module đa trang rất chuyên nghiệp.
+# --- NẾU CHƯA ĐĂNG NHẬP: GIẤU MENU VÀ HIỆN FORM ĐĂNG NHẬP ---
+if not st.session_state.logged_in:
+    # Lệnh CSS giấu thanh Sidebar bên trái
+    st.markdown("""
+    <style>
+        [data-testid="collapsedControl"] {display: none;}
+        [data-testid="stSidebar"] {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
 
-👈 **Hướng dẫn:**
-1. Hãy nhìn sang thanh menu bên trái (Sidebar).
-2. Click vào các module tương ứng để bắt đầu làm việc.
-""")
+    st.markdown("<h1 style='text-align: center; margin-top: 50px;'>🔒 HỆ THỐNG WANCHI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>Vui lòng nhập mật khẩu để vào phần mềm</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        pwd = st.text_input("Mật khẩu:", type="password", placeholder="Nhập mật khẩu...")
+        if st.button("🚀 ĐĂNG NHẬP", use_container_width=True):
+            if pwd == "tuanquang":  # <-- BẠN CÓ THỂ ĐỔI PASS Ở ĐÂY
+                st.session_state.logged_in = True
+                st.rerun() # Tải lại trang để bung menu
+            else:
+                st.error("❌ Sai mật khẩu! Vui lòng thử lại.")
 
-st.info("💡 Hệ thống hiện đang chạy phiên bản ổn định nhất.")
+# --- NẾU ĐÃ ĐĂNG NHẬP: HIỆN TRANG CHỦ VÀ MENU ---
+else:
+    st.title("🏭 CHÀO MỪNG ĐẾN VỚI WANCHI")
+    st.write("---")
+    st.success("✅ Đăng nhập thành công!")
+    st.info("👈 Thanh Menu bên trái đã được mở khóa. Bạn hãy click vào Menu góc trên cùng bên trái để chọn Module làm việc nhé!")
+    
+    if st.button("Đăng Xuất"):
+        st.session_state.logged_in = False
+        st.rerun()
