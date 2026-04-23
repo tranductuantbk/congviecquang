@@ -163,10 +163,31 @@ with tab_danh_sach:
                 "Giá Tiêu Chuẩn": st.column_config.NumberColumn("Giá Tiêu Chuẩn", format="%d ₫"),
             }
         )
-        if st.button("🗑️ Xóa toàn bộ danh sách"):
-            st.session_state.danh_sach_gc = []
-            # Đồng bộ xóa với DB
-            save_data_gc(st.session_state.danh_sach_gc)
-            st.rerun()
+        
+        st.markdown("---")
+        st.markdown("**Quản lý danh sách:**")
+        col_del1, col_del2 = st.columns([2, 1])
+        
+        with col_del1:
+            ds_ten_sp_xoa = [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_gc]
+            
+            if ds_ten_sp_xoa:
+                sp_can_xoa = st.selectbox("Chọn sản phẩm muốn xóa:", ds_ten_sp_xoa, key="sb_xoa_sp_gc")
+                
+                if st.button("🗑️ Xóa sản phẩm đã chọn"):
+                    st.session_state.danh_sach_gc = [sp for sp in st.session_state.danh_sach_gc if sp["Tên Sản Phẩm"] != sp_can_xoa]
+                    save_data_gc(st.session_state.danh_sach_gc)
+                    st.success(f"Đã xóa {sp_can_xoa}!")
+                    st.rerun()
+            else:
+                st.write("Không có sản phẩm nào để xóa.")
+                
+        with col_del2:
+            st.write("") 
+            st.write("")
+            if st.button("🚨 Xóa toàn bộ danh sách", use_container_width=True):
+                st.session_state.danh_sach_gc = []
+                save_data_gc(st.session_state.danh_sach_gc)
+                st.rerun()
     else:
         st.info("ℹ️ Chưa có dữ liệu sản phẩm gia công.")
