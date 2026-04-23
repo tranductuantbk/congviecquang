@@ -14,17 +14,21 @@ except Exception as e:
     st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
-# Hàm tải dữ liệu từ máy chủ xuống
+# Hàm tải dữ liệu từ máy chủ xuống (ĐÃ SỬA LỖI MẤT DỮ LIỆU)
 def load_data():
     try:
         inspector = inspect(conn.engine)
         if not inspector.has_table("wanchi_sanpham"):
             return []
-        df = conn.query("SELECT * FROM wanchi_sanpham", ttl=0)
+            
+        # DÙNG pd.read_sql ĐỂ TRUY VẤN TRỰC TIẾP, BỎ QUA BỘ ĐỆM CACHE
+        df = pd.read_sql("SELECT * FROM wanchi_sanpham", con=conn.engine)
+        
         if df.empty:
             return []
-        return df.to_dict('records') # Chuyển đổi thành List để Streamlit dễ xử lý
+        return df.to_dict('records') # Chuyển đổi thành List
     except Exception as e:
+        st.error(f"Lỗi tải dữ liệu từ máy chủ: {e}")
         return []
 
 # Hàm đồng bộ dữ liệu lên máy chủ
@@ -109,14 +113,14 @@ with tab_tinh_toan:
         
         # PHẦN 2: GIÁ ĐẠI LÝ
         st.markdown("### **Giá Đại Lý**")
-        he_so_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl")
-        gia_dai_ly = gvhb / he_so_dl
+        hs_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl")
+        gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
         # PHẦN 3: GIÁ TIÊU CHUẨN
         st.markdown("### **Giá tiêu chuẩn**")
-        he_so_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc")
-        gia_tieu_chuan = gia_dai_ly / he_so_tc
+        hs_tc = st.number_input("Hệ số LN TC", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc")
+        gia_tieu_chuan = gia_dai_ly / hs_tc
         st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
         
         st.write("---")
