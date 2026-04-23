@@ -44,7 +44,7 @@ if 'danh_sach_gc' not in st.session_state:
 st.title("⚙️ MODULE: TÍNH GIÁ GIA CÔNG")
 st.write("---")
 
-# --- TẠO 2 TAB ---
+# --- TẠO 2 TAB (Đã xóa Tab 3) ---
 tab_tinh_toan, tab_danh_sach = st.tabs([
     "🧮 1. TÍNH TOÁN & NHẬP LIỆU", 
     "📋 2. DANH SÁCH GIA CÔNG"
@@ -87,7 +87,14 @@ with tab_tinh_toan:
             bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=10)
             phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=100)
             
-            cp_khac = bao_bi + phu_kien
+            st.markdown("**Tính Phụ gia:**")
+            c_pg1, c_pg2 = st.columns(2)
+            don_gia_phu_gia = c_pg1.number_input("Đơn giá phụ gia (VNĐ/kg)", min_value=0, value=0, step=500)
+            ti_le_phu_gia = c_pg2.number_input("Tỉ lệ phụ gia (%)", min_value=0.0, value=0.0, step=0.1)
+            phu_gia = don_gia_phu_gia * (ti_le_phu_gia * trong_luong / 100) / 1000
+            st.caption(f"💡 Chi phí phụ gia: {phu_gia:,.2f} VNĐ/SP")
+            
+            cp_khac = bao_bi + phu_kien + phu_gia
 
     # --- TÍNH TOÁN CƠ BẢN ---
     gvhb = cp_nvl_1sp + cp_may_1sp + cp_khac
@@ -110,11 +117,12 @@ with tab_tinh_toan:
         st.write("---")
         st.markdown("**Phân tích giá thành:**")
         df_logic = pd.DataFrame({
-            "Hạng mục": ["Nguyên Vật Liệu", "Máy sản xuất", "Bao bì & Phụ kiện", "GIÁ VỐN (GVHB)"],
+            "Hạng mục": ["Nguyên Vật Liệu", "Máy sản xuất", "Bao bì & Phụ kiện", "Phụ gia", "GIÁ VỐN (GVHB)"],
             "Số tiền (VNĐ)": [
                 f"{cp_nvl_1sp:,.0f}", 
                 f"{cp_may_1sp:,.0f}", 
                 f"{bao_bi + phu_kien:,.0f}", 
+                f"{phu_gia:,.0f}",
                 f"{gvhb:,.0f}"
             ]
         })
