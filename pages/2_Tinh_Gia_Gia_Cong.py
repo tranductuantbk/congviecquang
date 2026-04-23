@@ -4,14 +4,11 @@ from sqlalchemy import inspect
 
 st.set_page_config(page_title="Tính Giá Gia Công", layout="wide")
 
-# --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
 if not st.session_state.get("logged_in", False):
     st.warning("🔒 Bạn chưa đăng nhập! Vui lòng quay lại Trang Chủ (Home) để gõ mật khẩu.")
     st.stop()
 
-# ==========================================
-# KẾT NỐI NEON (POSTGRESQL)
-# ==========================================
+# KẾT NỐI NEON
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
@@ -25,7 +22,8 @@ def load_data_gc():
             return []
         df = pd.read_sql("SELECT * FROM wanchi_giacong", con=conn.engine)
         return df.to_dict('records') if not df.empty else []
-    except Exception: return []
+    except Exception as e:
+        return []
 
 def save_data_gc(data_list):
     try:
@@ -35,9 +33,7 @@ def save_data_gc(data_list):
         df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
     except Exception: pass
 
-# ==========================================
-# KHỞI TẠO BỘ NHỚ LƯU TRỮ
-# ==========================================
+# KHỞI TẠO BỘ NHỚ
 if 'danh_sach_gc' not in st.session_state:
     st.session_state.danh_sach_gc = load_data_gc()
 
@@ -50,7 +46,7 @@ if 'is_editing_gc' not in st.session_state:
 
 st.title("⚙️ MODULE: TÍNH GIÁ GIA CÔNG")
 
-# GIAO DIỆN ĐIỀU HƯỚNG DẠNG NÚT BẤM
+# GIAO DIỆN ĐIỀU HƯỚNG DẠNG NÚT BẤM (CHỐNG LỖI)
 st.session_state.main_tabs_gc = st.radio(
     "Menu chức năng:", 
     ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH GIA CÔNG"], 
@@ -65,21 +61,20 @@ st.write("---")
 # ==========================================
 if st.session_state.main_tabs_gc == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
     if st.session_state.is_editing_gc:
-        st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM**")
+        st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM GIA CÔNG**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state.is_editing_gc = False
-            # Dọn dẹp sạch sẽ ô nhập liệu cũ
-            for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_ck_in", "gc_sp_khuon_in", "gc_bb_in", "gc_pk_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
+            # Dọn dẹp ô nhập liệu để nhập đồ mới
+            for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
                 if k in st.session_state:
                     del st.session_state[k]
             st.rerun()
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM GIA CÔNG")
     col_info1, col_info2 = st.columns(2)
-    # Chú ý: Dùng key=... để hứng dữ liệu thẳng từ nút Chỉnh sửa
     ma_sp = col_info1.text_input("1. Mã Sản Phẩm", key="gc_ma_in")
     ten_sp = col_info2.text_input("2. Tên Sản Phẩm", key="gc_ten_in")
-
+    
     st.markdown("---")
     col_input, col_result = st.columns([1.2, 1])
 
@@ -95,32 +90,33 @@ if st.session_state.main_tabs_gc == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         with st.expander("⚙️ NHÁNH 2: MÁY SẢN XUẤT", expanded=True):
             c3, c4 = st.columns(2)
             gia_may_ca = c3.number_input("Giá máy / Ca 8h (VNĐ)", value=1700000, step=50000, key="gc_gia_may_in")
-            chu_ky = c4.number_input("Chu kỳ (giây)", value=40.0, step=1.0, key="gc_ck_in")
+            chu_ky = c4.number_input("Chu kỳ (giây)", value=40.0, step=1.0, key="gc_chu_ky_in")
             sp_khuon = st.number_input("Số SP / Khuôn", value=2, min_value=1, key="gc_sp_khuon_in")
             sl_ca = (8 * 3600 / chu_ky) * sp_khuon
             cp_may_1sp = gia_may_ca / sl_ca if sl_ca > 0 else 0
 
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC", expanded=True):
-            bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=10, key="gc_bb_in")
-            phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=100, key="gc_pk_in")
+            bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=10, key="gc_bao_bi_in")
+            phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=100, key="gc_phu_kien_in")
             
             st.markdown("**Tính Phụ gia:**")
             c_pg1, c_pg2 = st.columns(2)
             don_gia_phu_gia = c_pg1.number_input("Đơn giá phụ gia (VNĐ/kg)", value=0, step=500, key="gc_dg_pg_in")
             ti_le_phu_gia = c_pg2.number_input("Tỉ lệ phụ gia (%)", value=0.0, step=0.1, key="gc_tl_pg_in")
             phu_gia = don_gia_phu_gia * (ti_le_phu_gia * trong_luong / 100) / 1000
+            st.caption(f"💡 Chi phí phụ gia: {phu_gia:,.2f} VNĐ/SP")
             
             cp_khac = bao_bi + phu_kien + phu_gia
 
     gvhb = cp_nvl_1sp + cp_may_1sp + cp_khac
 
     with col_result:
-        st.subheader("📊 KẾT QUẢ TÍNH GIÁ")
-        df_logic = pd.DataFrame({
-            "Hạng mục": ["Nguyên Vật Liệu", "Máy sản xuất", "Chi phí khác (Bao bì, PK, Phụ gia)", "GIÁ VỐN (GVHB)"],
-            "Số tiền (VNĐ)": [f"{cp_nvl_1sp:,.0f}", f"{cp_may_1sp:,.0f}", f"{cp_khac:,.0f}", f"{gvhb:,.0f}"]
+        st.subheader("📊 BẢNG PHÂN TÍCH GIÁ THÀNH")
+        df_summary = pd.DataFrame({
+            "Thành phần": ["1. Nguyên vật liệu", "2. Máy sản xuất", "3. Chi phí khác (Bao bì, PK, Phụ gia)", "TỔNG GIÁ VỐN"],
+            "Thành tiền (VNĐ)": [f"{cp_nvl_1sp:,.0f}", f"{cp_may_1sp:,.0f}", f"{cp_khac:,.0f}", f"{gvhb:,.0f}"]
         })
-        st.table(df_logic)
+        st.table(df_summary)
         
         st.markdown("---")
         hs_dl = st.number_input("Hệ số LN ĐL", value=0.6, step=0.01, key="gc_hs_dl_in")
@@ -143,35 +139,31 @@ if st.session_state.main_tabs_gc == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 }
                 
                 if st.session_state.is_editing_gc:
-                    # Ghi đè vào vị trí cũ nếu đang sửa
                     st.session_state.danh_sach_gc[st.session_state.edit_index_gc] = new_data
                     st.session_state.is_editing_gc = False
-                    # Xóa bộ nhớ tạm để không bị kẹt số cũ cho lần nhập sau
-                    for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_ck_in", "gc_sp_khuon_in", "gc_bb_in", "gc_pk_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
+                    for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
                         if k in st.session_state:
                             del st.session_state[k]
                 else:
-                    # Thêm mới
                     st.session_state.danh_sach_gc.append(new_data)
                 
                 save_data_gc(st.session_state.danh_sach_gc)
-                # Tự động nhảy qua Tab 2 xem kết quả
-                st.session_state.main_tabs_gc = "📋 2. DANH SÁCH GIA CÔNG" 
+                st.session_state.main_tabs_gc = "📋 2. DANH SÁCH GIA CÔNG"
                 st.rerun()
 
 # ==========================================
 # TAB 2: DANH SÁCH SẢN PHẨM GIA CÔNG
 # ==========================================
 elif st.session_state.main_tabs_gc == "📋 2. DANH SÁCH GIA CÔNG":
-    st.subheader("📋 BẢNG TỔNG HỢP CÁC PHÂN KHÚC GIÁ GIA CÔNG")
-    if len(st.session_state.danh_sach_gc) > 0:
+    st.subheader("📋 DANH SÁCH SẢN PHẨM ĐÃ LƯU")
+    if st.session_state.danh_sach_gc:
         df = pd.DataFrame(st.session_state.danh_sach_gc)
         cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"]
         st.dataframe(df[[c for c in cols_to_show if c in df.columns]], use_container_width=True)
         
         st.markdown("---")
         st.markdown("**Quản lý:**")
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 1])
         
         with col1:
             ten_sp_chon = st.selectbox("Chọn sản phẩm:", [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_gc])
@@ -181,16 +173,16 @@ elif st.session_state.main_tabs_gc == "📋 2. DANH SÁCH GIA CÔNG":
             if c_btn1.button("✏️ Chỉnh sửa", use_container_width=True):
                 sp = st.session_state.danh_sach_gc[idx]
                 
-                # BƠM DỮ LIỆU THẲNG VÀO LÕI GIAO DIỆN CỦA TAB 1 BẰNG KEY
+                # BƠM DỮ LIỆU CŨ THẲNG VÀO Ô NHẬP
                 st.session_state["gc_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["gc_ten_in"] = sp.get("Tên Sản Phẩm", "")
                 st.session_state["gc_tl_in"] = float(sp.get("Trọng lượng", 34.0))
                 st.session_state["gc_gia_nhua_in"] = int(sp.get("Đơn giá nhựa", 23000))
                 st.session_state["gc_gia_may_in"] = int(sp.get("Giá máy", 1700000))
-                st.session_state["gc_ck_in"] = float(sp.get("Chu kỳ", 40.0))
+                st.session_state["gc_chu_ky_in"] = float(sp.get("Chu kỳ", 40.0))
                 st.session_state["gc_sp_khuon_in"] = int(sp.get("SP Khuôn", 2))
-                st.session_state["gc_bb_in"] = int(sp.get("Bao bì", 10))
-                st.session_state["gc_pk_in"] = int(sp.get("Phụ kiện", 100))
+                st.session_state["gc_bao_bi_in"] = int(sp.get("Bao bì", 10))
+                st.session_state["gc_phu_kien_in"] = int(sp.get("Phụ kiện", 100))
                 st.session_state["gc_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
                 st.session_state["gc_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
                 st.session_state["gc_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
@@ -203,6 +195,14 @@ elif st.session_state.main_tabs_gc == "📋 2. DANH SÁCH GIA CÔNG":
                 
             if c_btn2.button("🗑️ Xóa", use_container_width=True):
                 st.session_state.danh_sach_gc.pop(idx)
+                save_data_gc(st.session_state.danh_sach_gc)
+                st.rerun()
+                
+        with col2:
+            st.write("") 
+            st.write("")
+            if st.button("🚨 Xóa toàn bộ danh sách", use_container_width=True):
+                st.session_state.danh_sach_gc = []
                 save_data_gc(st.session_state.danh_sach_gc)
                 st.rerun()
     else:
