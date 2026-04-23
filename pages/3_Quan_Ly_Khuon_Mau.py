@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-import unicodedata
 from datetime import datetime
 from sqlalchemy import inspect
 import os
@@ -11,72 +10,103 @@ import os
 # ==========================================
 st.set_page_config(page_title="WANCHI - Quản Lý Khuôn Mẫu", layout="wide")
 
-# Khởi tạo kết nối đến CSDL Neon
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
     st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
-def remove_accents(input_str):
-    s = str(input_str).replace('Đ', 'D').replace('đ', 'd')
-    nfkd_form = unicodedata.normalize('NFKD', s)
-    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
-
-# ---> ĐÃ ĐỔI CÁCH XỬ LÝ XUẤT PDF AN TOÀN TUYỆT ĐỐI <---
+# ---> HÀM XUẤT PDF MỚI (GIỐNG MẪU PHIẾU ĐẶT HÀNG) <---
 def export_pdf(df, title):
-    pdf = FPDF(orientation='L')
+    # Khởi tạo PDF dọc (Portrait) hoặc ngang tùy số lượng cột. Chọn L (ngang) cho rộng rãi.
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, txt=f"WANCHI - {remove_accents(title)}", ln=True, align='C')
-    pdf.set_font("Arial", size=10)
-    pdf.cell(0, 10, txt=f"Ngay xuat: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='R')
     
+    # Nạp font tiếng Việt (BẮT BUỘC phải có file arial.ttf trong cùng thư mục)
+    try:
+        pdf.add_font('ArialVN', '', 'arial.ttf', uni=True)
+        pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True) # Bold (tùy chọn)
+        font_name = 'ArialVN'
+    except:
+        # Fallback nếu không có font
+        font_name = 'Arial'
+        st.warning("Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
+
+    # 1. Header Công ty (Góc trái)
+    pdf.set_font(font_name, '', 10)
+    pdf.cell(0, 5, txt="775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM", ln=True, align='L')
+    pdf.cell(0, 5, txt="SĐT: 0902.580.828 - 0937.572.577", ln=True, align='L')
+    pdf.ln(5)
+
+    # 2. Tiêu đề Báo Cáo
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
+    pdf.cell(0, 10, txt=title.upper(), ln=True, align='C')
+    
+    # 3. Ngày tháng
+    pdf.set_font(font_name, '', 10)
+    pdf.cell(0, 8, txt=f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
+    pdf.ln(5)
+
+    # 4. Vẽ bảng dữ liệu
     if not df.empty:
+        # Tính độ rộng cột tự động dựa trên khổ A4 ngang (277mm)
         col_width = 277 / len(df.columns)
-        pdf.set_fill_color(200, 200, 200)
+        
+        # Tiêu đề bảng
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 10)
+        pdf.set_fill_color(220, 220, 220) # Màu xám nhạt cho header
         for col in df.columns:
-            pdf.cell(col_width, 10, txt=remove_accents(str(col)), border=1, fill=True)
+            pdf.cell(col_width, 10, txt=str(col), border=1, fill=True, align='C')
         pdf.ln()
         
+        # Nội dung bảng
+        pdf.set_font(font_name, '', 10)
         sum_tong_tien = 0 
         
         for _, row in df.iterrows():
             for col_name, item in row.items():
+                val_str = str(item)
+                align_col = 'L' # Mặc định canh trái
+                
+                # Format số tiền
                 try:
                     if col_name in ["Số lượng", "Đơn giá", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and pd.notnull(item) and str(item).strip() != "":
                         val = float(item)
-                        formatted_item = f"{val:,.0f}"
-                        pdf.cell(col_width, 10, txt=remove_accents(formatted_item), border=1)
-                        if col_name == "Tổng tiền" or col_name == "TỔNG CỘNG":
+                        val_str = f"{val:,.0f}".replace(",", ".") # Chuyển phẩy thành chấm (chuẩn VN)
+                        align_col = 'R' # Số tiền canh phải
+                        
+                        if col_name in ["Tổng tiền", "TỔNG CỘNG"]:
                             sum_tong_tien += val
-                    else:
-                        pdf.cell(col_width, 10, txt=remove_accents(str(item)), border=1)
                 except ValueError:
-                    pdf.cell(col_width, 10, txt=remove_accents(str(item)), border=1)
+                    pass
+                
+                pdf.cell(col_width, 10, txt=val_str, border=1, align=align_col)
             pdf.ln()
             
+        # Dòng TỔNG CỘNG cuối cùng
         if "Tổng tiền" in df.columns or "TỔNG CỘNG" in df.columns:
-            pdf.set_font("Arial", "B", 10)
-            pdf.set_fill_color(230, 230, 230)
+            pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+            pdf.set_fill_color(240, 240, 240)
+            
             for i, col in enumerate(df.columns):
-                if col == "Tổng tiền" or col == "TỔNG CỘNG":
-                    pdf.cell(col_width, 10, txt=f"{sum_tong_tien:,.0f}", border=1, fill=True)
+                if col in ["Tổng tiền", "TỔNG CỘNG"]:
+                    tong_str = f"{sum_tong_tien:,.0f}".replace(",", ".")
+                    pdf.cell(col_width, 10, txt=tong_str, border=1, fill=True, align='R')
                 elif i == len(df.columns) - 2: 
-                    pdf.cell(col_width, 10, txt="TONG CONG:", border=1, align='R', fill=True)
+                    pdf.cell(col_width, 10, txt="TỔNG CỘNG:", border=1, fill=True, align='R')
                 else:
                     pdf.cell(col_width, 10, txt="", border=1, fill=True) 
             pdf.ln()
             
-    # CÁCH KHÁC: Ghi trực tiếp ra file vật lý rồi đọc ngược lại thành Bytes (Chống lỗi Crash FPDF)
-    temp_filename = "temp_report.pdf"
+    # Ghi ra file tạm và đọc lại thành bytes
+    temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     
     with open(temp_filename, "rb") as f:
         pdf_bytes = f.read()
         
     if os.path.exists(temp_filename):
-        os.remove(temp_filename) # Xóa file rác sau khi đọc xong
+        os.remove(temp_filename)
         
     return pdf_bytes
 
@@ -182,13 +212,9 @@ with tab_A:
     
     if st.button("Tạo file PDF (Module A)"):
         df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
-        pdf_a = export_pdf(df_export_a, f"BAO CAO NGUYEN VAT LIEU - {filter_pdf_a}")
-        col_pdf2.download_button(
-            label="⬇️ Nhấn để Tải PDF Xuống", 
-            data=pdf_a, 
-            file_name=f"WANCHI_NVL_{filter_pdf_a}.pdf", 
-            mime="application/pdf"
-        )
+        # Thay đổi Tiêu đề PDF truyền vào hàm
+        pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
+        col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE B: GIA CÔNG
@@ -239,13 +265,8 @@ with tab_B:
     
     if st.button("Tạo file PDF (Module B)"):
         df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
-        pdf_b = export_pdf(df_export_b, f"BAO CAO GIA CONG - {filter_pdf_b}")
-        col_pdf4.download_button(
-            label="⬇️ Nhấn để Tải PDF Xuống", 
-            data=pdf_b, 
-            file_name=f"WANCHI_GiaCong_{filter_pdf_b}.pdf", 
-            mime="application/pdf"
-        )
+        pdf_b = export_pdf(df_export_b, f"BÁO CÁO CHI PHÍ GIA CÔNG KHUÔN {filter_pdf_b}")
+        col_pdf4.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE C: VẬT TƯ
@@ -285,13 +306,8 @@ with tab_C:
     
     if st.button("Tạo file PDF (Module C)"):
         df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
-        pdf_c = export_pdf(df_export_c, f"BAO CAO VAT TU - {filter_pdf_c}")
-        col_pdf6.download_button(
-            label="⬇️ Nhấn để Tải PDF Xuống", 
-            data=pdf_c, 
-            file_name=f"WANCHI_VatTu_{filter_pdf_c}.pdf", 
-            mime="application/pdf"
-        )
+        pdf_c = export_pdf(df_export_c, f"BÁO CÁO VẬT TƯ KHUÔN {filter_pdf_c}")
+        col_pdf6.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
 
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
@@ -346,10 +362,5 @@ with tab_D:
     
     if st.button("Tạo file PDF (Module D)"):
         df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
-        pdf_d = export_pdf(df_export_d, f"TONG HOP CHI PHI KHUON - {filter_pdf_d}")
-        col_pdf2_d.download_button(
-            label="⬇️ Nhấn để Tải PDF Xuống", 
-            data=pdf_d, 
-            file_name=f"WANCHI_TongHop_{filter_pdf_d}.pdf", 
-            mime="application/pdf"
-        )
+        pdf_d = export_pdf(df_export_d, f"BẢNG TỔNG HỢP CHI PHÍ KHUÔN {filter_pdf_d}")
+        col_pdf2_d.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
