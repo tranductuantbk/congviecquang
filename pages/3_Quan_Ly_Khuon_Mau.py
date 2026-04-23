@@ -1,5 +1,9 @@
 import streamlit as st
 import pandas as pd
+# --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
+if not st.session_state.get("logged_in", False):
+    st.warning("🔒 Bạn chưa đăng nhập! Vui lòng quay lại Trang Chủ (Home) để gõ mật khẩu.")
+    st.stop()
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
