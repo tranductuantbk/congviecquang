@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import inspect
 
-# --- KHỞI TẠO CẤU HÌNH ---
+# --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Tính Giá Sản Xuất", layout="wide")
 
 # Kiểm tra đăng nhập từ trang Home
@@ -44,19 +44,21 @@ def save_data(data_list):
 if 'danh_sach_sp' not in st.session_state:
     st.session_state.danh_sach_sp = load_data()
 
-# Trạng thái điều hướng tab
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
 
-# Trạng thái chỉnh sửa
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
     st.session_state.edit_index = None
 
+# Hàm hỗ trợ lấy dữ liệu điền vào form khi đang ở chế độ Sửa
+def get_val(key, default_val):
+    return st.session_state[key] if st.session_state.edit_mode and key in st.session_state else default_val
+
 # ==========================================
 # GIAO DIỆN ĐIỀU HƯỚNG
 # ==========================================
-st.title("💰 MODULE: TÍNH GIÁ SẢN XUẤT - WANCHI")
+st.title("💰 MODULE: TÍNH GIÁ SẢN XUẤT")
 
 tabs = ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH SẢN PHẨM", "🧩 3. GHÉP BỘ"]
 st.session_state.active_tab = st.selectbox("Chọn Tab làm việc:", tabs, index=tabs.index(st.session_state.active_tab))
@@ -74,8 +76,8 @@ if st.session_state.active_tab == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
     col_info1, col_info2 = st.columns(2)
-    ma_sp = col_info1.text_input("1. Mã Sản Phẩm", value=st.session_state.get('temp_ma_sp', ""), placeholder="VD: SP001")
-    ten_sp = col_info2.text_input("2. Tên Sản Phẩm", value=st.session_state.get('temp_ten_sp', ""), placeholder="VD: Khay nhựa đen")
+    ma_sp = col_info1.text_input("1. Mã Sản Phẩm", value=get_val('temp_ma_sp', ""), placeholder="VD: SP001")
+    ten_sp = col_info2.text_input("2. Tên Sản Phẩm", value=get_val('temp_ten_sp', ""), placeholder="VD: Khay nhựa đen")
     
     st.markdown("---")
     col_input, col_result = st.columns([1.2, 1])
@@ -83,35 +85,34 @@ if st.session_state.active_tab == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
     with col_input:
         st.subheader("📥 THÔNG SỐ ĐẦU VÀO")
         
-        # TRẢ LẠI GIAO DIỆN NHẬP LIỆU ĐƠN GIẢN NHƯ CŨ
         with st.expander("🍀 NHÁNH 1: NGUYÊN VẬT LIỆU", expanded=True):
             c1, c2 = st.columns(2)
-            trong_luong = c1.number_input("Trọng lượng (gram)", min_value=0.0, value=st.session_state.get('temp_trong_luong', 34.0), step=0.1)
-            gia_nhua = c2.number_input("Đơn giá nhựa (VNĐ/kg)", min_value=0, value=st.session_state.get('temp_gia_nhua', 23000), step=500)
+            trong_luong = c1.number_input("Trọng lượng (gram)", min_value=0.0, value=float(get_val('temp_trong_luong', 34.0)), step=0.1)
+            gia_nhua = c2.number_input("Đơn giá nhựa (VNĐ/kg)", min_value=0, value=int(get_val('temp_gia_nhua', 23000)), step=500)
             cp_nvl_1sp = (trong_luong / 1000) * gia_nhua
 
         with st.expander("⚙️ NHÁNH 2: MÁY SẢN XUẤT", expanded=True):
             c3, c4 = st.columns(2)
-            gia_may_ca = c3.number_input("Giá máy / Ca 8h (VNĐ)", min_value=0, value=st.session_state.get('temp_gia_may', 1700000), step=50000)
-            chu_ky = c4.number_input("Chu kỳ (giây)", min_value=1.0, value=st.session_state.get('temp_chu_ky', 40.0), step=1.0)
-            sp_khuon = st.number_input("Số SP / Khuôn", min_value=1, value=st.session_state.get('temp_sp_khuon', 2))
+            gia_may_ca = c3.number_input("Giá máy / Ca 8h (VNĐ)", min_value=0, value=int(get_val('temp_gia_may', 1700000)), step=50000)
+            chu_ky = c4.number_input("Chu kỳ (giây)", min_value=1.0, value=float(get_val('temp_chu_ky', 40.0)), step=1.0)
+            sp_khuon = st.number_input("Số SP / Khuôn", min_value=1, value=int(get_val('temp_sp_khuon', 2)))
             sl_ca = (8 * 3600 / chu_ky) * sp_khuon
             cp_may_1sp = gia_may_ca / sl_ca if sl_ca > 0 else 0
 
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC & KHẤU HAO", expanded=True):
-            bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=st.session_state.get('temp_bao_bi', 10))
-            phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=st.session_state.get('temp_phu_kien', 100))
+            bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=int(get_val('temp_bao_bi', 10)))
+            phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=int(get_val('temp_phu_kien', 100)))
             
             st.markdown("**Tính Phụ gia:**")
             c_pg1, c_pg2 = st.columns(2)
-            don_gia_phu_gia = c_pg1.number_input("Đơn giá phụ gia (VNĐ/kg)", min_value=0, value=st.session_state.get('temp_dg_pg', 0), step=500)
-            ti_le_phu_gia = c_pg2.number_input("Tỉ lệ phụ gia (%)", min_value=0.0, value=st.session_state.get('temp_tl_pg', 0.0), step=0.1)
+            don_gia_phu_gia = c_pg1.number_input("Đơn giá phụ gia (VNĐ/kg)", min_value=0, value=int(get_val('temp_dg_pg', 0)), step=500)
+            ti_le_phu_gia = c_pg2.number_input("Tỉ lệ phụ gia (%)", min_value=0.0, value=float(get_val('temp_tl_pg', 0.0)), step=0.1)
             phu_gia = don_gia_phu_gia * (ti_le_phu_gia * trong_luong / 100) / 1000
             
             st.markdown("**Tính Khấu hao khuôn:**")
             ck1, ck2 = st.columns(2)
-            gia_tri_khuon = ck1.number_input("Giá trị khuôn (VNĐ)", min_value=0, value=st.session_state.get('temp_gia_khuon', 0), step=1000000)
-            sl_khuon_sx = ck2.number_input("SL khuôn sản xuất (Cái)", min_value=1, value=st.session_state.get('temp_sl_khuon', 10000))
+            gia_tri_khuon = ck1.number_input("Giá trị khuôn (VNĐ)", min_value=0, value=int(get_val('temp_gia_khuon', 0)), step=1000000)
+            sl_khuon_sx = ck2.number_input("SL khuôn sản xuất (Cái)", min_value=1, value=int(get_val('temp_sl_khuon', 10000)))
             khau_hao = gia_tri_khuon / sl_khuon_sx if sl_khuon_sx > 0 else 0
             
             cp_khac_no_kh = bao_bi + phu_kien + phu_gia
@@ -121,8 +122,6 @@ if st.session_state.active_tab == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
 
     with col_result:
         st.subheader("📊 BẢNG PHÂN TÍCH GIÁ THÀNH")
-        
-        # ---> BẢNG THÀNH PHẦN CẤU TẠO (Hiển thị trước nút Lưu) <---
         df_summary = pd.DataFrame({
             "Thành phần cấu tạo": [
                 "1. Nguyên vật liệu", 
@@ -142,11 +141,11 @@ if st.session_state.active_tab == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.table(df_summary)
         
         st.markdown("---")
-        hs_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, value=0.6, key="hs_dl")
+        hs_dl = st.number_input("Hệ số LN ĐL", min_value=0.01, value=float(get_val('temp_hs_dl', 0.6)), key="hs_dl")
         gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
-        hs_tc = st.number_input("Hệ số LN TC", min_value=0.01, value=0.6, key="hs_tc")
+        hs_tc = st.number_input("Hệ số LN TC", min_value=0.01, value=float(get_val('temp_hs_tc', 0.6)), key="hs_tc")
         gia_tieu_chuan = gia_dai_ly / hs_tc
         st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
 
@@ -154,7 +153,27 @@ if st.session_state.active_tab == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
             if ma_sp == "" or ten_sp == "":
                 st.warning("⚠️ Vui lòng nhập Mã và Tên sản phẩm!")
             else:
-                new_data = {"Mã SP": ma_sp, "Tên Sản Phẩm": ten_sp, "Giá Vốn": round(gvhb), "Giá Đại Lý": round(gia_dai_ly), "Giá Tiêu Chuẩn": round(gia_tieu_chuan)}
+                # Đã nâng cấp: Lưu toàn bộ thông số đầu vào để sau này gọi lại
+                new_data = {
+                    "Mã SP": ma_sp,
+                    "Tên Sản Phẩm": ten_sp,
+                    "Trọng lượng": trong_luong,
+                    "Đơn giá nhựa": gia_nhua,
+                    "Giá máy": gia_may_ca,
+                    "Chu kỳ": chu_ky,
+                    "SP Khuôn": sp_khuon,
+                    "Bao bì": bao_bi,
+                    "Phụ kiện": phu_kien,
+                    "Đơn giá phụ gia": don_gia_phu_gia,
+                    "Tỉ lệ phụ gia": ti_le_phu_gia,
+                    "Giá trị khuôn": gia_tri_khuon,
+                    "SL khuôn": sl_khuon_sx,
+                    "Hệ số ĐL": hs_dl,
+                    "Hệ số TC": hs_tc,
+                    "Giá Vốn": round(gvhb),
+                    "Giá Đại Lý": round(gia_dai_ly),
+                    "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
+                }
                 
                 if st.session_state.edit_mode:
                     st.session_state.danh_sach_sp[st.session_state.edit_index] = new_data
@@ -173,7 +192,11 @@ elif st.session_state.active_tab == "📋 2. DANH SÁCH SẢN PHẨM":
     st.subheader("📋 DANH SÁCH SẢN PHẨM ĐÃ LƯU")
     if st.session_state.danh_sach_sp:
         df = pd.DataFrame(st.session_state.danh_sach_sp)
-        st.dataframe(df, use_container_width=True)
+        
+        # Chỉ hiển thị 5 cột quan trọng nhất cho gọn gàng
+        cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"]
+        df_display = df[[c for c in cols_to_show if c in df.columns]]
+        st.dataframe(df_display, use_container_width=True)
         
         st.markdown("---")
         st.markdown("**Quản lý:**")
@@ -186,8 +209,24 @@ elif st.session_state.active_tab == "📋 2. DANH SÁCH SẢN PHẨM":
             c_btn1, c_btn2 = st.columns(2)
             if c_btn1.button("✏️ Chỉnh sửa", use_container_width=True):
                 sp = st.session_state.danh_sach_sp[idx]
-                st.session_state.temp_ma_sp = sp["Mã SP"]
-                st.session_state.temp_ten_sp = sp["Tên Sản Phẩm"]
+                
+                # Bốc toàn bộ 15 thông số lưu vào bộ nhớ tạm
+                st.session_state.temp_ma_sp = sp.get("Mã SP", "")
+                st.session_state.temp_ten_sp = sp.get("Tên Sản Phẩm", "")
+                st.session_state.temp_trong_luong = float(sp.get("Trọng lượng", 34.0))
+                st.session_state.temp_gia_nhua = int(sp.get("Đơn giá nhựa", 23000))
+                st.session_state.temp_gia_may = int(sp.get("Giá máy", 1700000))
+                st.session_state.temp_chu_ky = float(sp.get("Chu kỳ", 40.0))
+                st.session_state.temp_sp_khuon = int(sp.get("SP Khuôn", 2))
+                st.session_state.temp_bao_bi = int(sp.get("Bao bì", 10))
+                st.session_state.temp_phu_kien = int(sp.get("Phụ kiện", 100))
+                st.session_state.temp_dg_pg = int(sp.get("Đơn giá phụ gia", 0))
+                st.session_state.temp_tl_pg = float(sp.get("Tỉ lệ phụ gia", 0.0))
+                st.session_state.temp_gia_khuon = int(sp.get("Giá trị khuôn", 0))
+                st.session_state.temp_sl_khuon = int(sp.get("SL khuôn", 10000))
+                st.session_state.temp_hs_dl = float(sp.get("Hệ số ĐL", 0.6))
+                st.session_state.temp_hs_tc = float(sp.get("Hệ số TC", 0.6))
+                
                 st.session_state.edit_mode = True
                 st.session_state.edit_index = idx
                 st.session_state.active_tab = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
@@ -217,7 +256,7 @@ else:
         st.subheader("📥 THÔNG SỐ ĐẦU VÀO (BỘ)")
         
         with st.expander("⚙️ NHÁNH 2: GHÉP BỘ PHẬN", expanded=True):
-            ds_ten_sp = [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_sp]
+            ds_ten_sp = [sp["Tên Sản Phẩm"] for sp in st.session_state.danh_sach_sp if not str(sp["Tên Sản Phẩm"]).startswith("[BỘ]")]
             
             chon_than = st.selectbox("Mục 1: Bộ phận thân", ds_ten_sp, key="sb_than_bo") if ds_ten_sp else None
             chon_nap = st.selectbox("Mục 2: Bộ phận nắp", ds_ten_sp, key="sb_nap_bo") if ds_ten_sp else None
@@ -241,7 +280,6 @@ else:
             sl_sx_bo = ck2_bo.number_input("SL sản xuất bộ (Cái)", min_value=1, value=10000, key="sl_bo")
             
             kh_bo = gt_khuon_bo / sl_sx_bo if sl_sx_bo > 0 else 0
-            st.caption(f"💡 Khấu hao dự kiến bộ: {kh_bo:,.2f} VNĐ/Bộ")
             cp_khac_bo = bb_bo + pk_bo + kh_bo
 
     gvhb_bo = von_than + von_nap + cp_khac_bo
@@ -249,12 +287,10 @@ else:
     with col_result_bo:
         st.subheader("📊 KẾT QUẢ TÍNH GIÁ BỘ")
         
-        st.markdown("### **Giá Đại Lý (Bộ)**")
         hs_dl_bo = st.number_input("Hệ số LN ĐL (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_dl_bo")
         gia_dl_bo = gvhb_bo / hs_dl_bo
         st.metric(label="Giá Đại lý Bộ", value=f"{round(gia_dl_bo):,} VNĐ")
 
-        st.markdown("### **Giá tiêu chuẩn (Bộ)**")
         hs_tc_bo = st.number_input("Hệ số LN TC (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
         gia_tc_bo = gia_dl_bo / hs_tc_bo
         st.metric(label="Giá Tiêu chuẩn Bộ", value=f"{round(gia_tc_bo):,} VNĐ")
@@ -263,13 +299,7 @@ else:
         st.markdown("**Phân tích giá thành bộ:**")
         df_bo = pd.DataFrame({
             "Hạng mục": ["Bộ phận thân", "Bộ phận nắp", "Bao bì & Phụ kiện", "Khấu hao khuôn", "GIÁ VỐN (BỘ)"],
-            "Số tiền (VNĐ)": [
-                f"{von_than:,.0f}", 
-                f"{von_nap:,.0f}", 
-                f"{bb_bo + pk_bo:,.0f}", 
-                f"{kh_bo:,.0f}", 
-                f"{gvhb_bo:,.0f}"
-            ]
+            "Số tiền (VNĐ)": [f"{von_than:,.0f}", f"{von_nap:,.0f}", f"{bb_bo + pk_bo:,.0f}", f"{kh_bo:,.0f}", f"{gvhb_bo:,.0f}"]
         })
         st.table(df_bo)
 
