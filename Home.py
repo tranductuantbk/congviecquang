@@ -23,7 +23,7 @@ if not st.session_state.logged_in:
     with col2:
         pwd = st.text_input("Mật khẩu:", type="password", placeholder="Nhập mật khẩu...")
         if st.button("🚀 ĐĂNG NHẬP", use_container_width=True):
-            if pwd == "Wanchi@2026":  # <-- BẠN CÓ THỂ ĐỔI PASS Ở ĐÂY
+            if pwd == "tuanquang":  # <-- BẠN CÓ THỂ ĐỔI PASS Ở ĐÂY
                 st.session_state.logged_in = True
                 st.rerun() # Tải lại trang để bung menu
             else:
