@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
+import unicodedata
 from datetime import datetime
 from sqlalchemy import inspect
 import os
@@ -10,95 +11,144 @@ import os
 # ==========================================
 st.set_page_config(page_title="WANCHI - Quản Lý Khuôn Mẫu", layout="wide")
 
+# Khởi tạo kết nối đến CSDL Neon
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
     st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
-# ---> HÀM XUẤT PDF MỚI (GIỐNG MẪU PHIẾU ĐẶT HÀNG) <---
+def remove_accents(input_str):
+    s = str(input_str).replace('Đ', 'D').replace('đ', 'd')
+    nfkd_form = unicodedata.normalize('NFKD', s)
+    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+# ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP (CÂN CỘT + THÊM LOGO) <---
 def export_pdf(df, title):
-    # Khởi tạo PDF dọc (Portrait) hoặc ngang tùy số lượng cột. Chọn L (ngang) cho rộng rãi.
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
-    # Nạp font tiếng Việt (BẮT BUỘC phải có file arial.ttf trong cùng thư mục)
+    # Nạp font tiếng Việt
     try:
         pdf.add_font('ArialVN', '', 'arial.ttf', uni=True)
-        pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True) # Bold (tùy chọn)
+        pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True)
         font_name = 'ArialVN'
     except:
-        # Fallback nếu không có font
         font_name = 'Arial'
-        st.warning("Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
+        st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
-    # 1. Header Công ty (Góc trái)
+    # 1. THÊM LOGO
+    logo_path = "logo.png" # Bắt buộc phải có file logo.png nằm cùng thư mục
+    try:
+        if os.path.exists(logo_path):
+            pdf.image(logo_path, x=10, y=8, w=35)
+            start_x = 50 # Đẩy chữ sang phải nhường chỗ cho logo
+        else:
+            start_x = 10
+    except:
+        start_x = 10
+
+    # 2. THÔNG TIN CÔNG TY
+    pdf.set_xy(start_x, 10)
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 14)
+    pdf.cell(0, 6, txt="WANCHI", ln=True, align='L')
+    
+    pdf.set_x(start_x)
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 5, txt="775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM", ln=True, align='L')
+    
+    pdf.set_x(start_x)
     pdf.cell(0, 5, txt="SĐT: 0902.580.828 - 0937.572.577", ln=True, align='L')
-    pdf.ln(5)
+    
+    pdf.ln(10) # Tạo khoảng trống
 
-    # 2. Tiêu đề Báo Cáo
+    # 3. TIÊU ĐỀ BÁO CÁO
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     pdf.cell(0, 10, txt=title.upper(), ln=True, align='C')
     
-    # 3. Ngày tháng
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
     pdf.ln(5)
 
-    # 4. Vẽ bảng dữ liệu
+    # 4. VẼ BẢNG VÀ CÂN CỘT TỰ ĐỘNG
     if not df.empty:
-        # Tính độ rộng cột tự động dựa trên khổ A4 ngang (277mm)
-        col_width = 277 / len(df.columns)
+        pdf.set_font(font_name, '', 8) # Đưa font bảng về size 8 để không bị tràn chữ
         
-        # Tiêu đề bảng
-        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 10)
-        pdf.set_fill_color(220, 220, 220) # Màu xám nhạt cho header
+        # Bước 4a: Tính toán độ rộng cần thiết cho từng cột
+        col_widths = []
         for col in df.columns:
-            pdf.cell(col_width, 10, txt=str(col), border=1, fill=True, align='C')
+            max_w = pdf.get_string_width(str(col)) + 4 # Cộng 4mm lề
+            for item in df[col]:
+                val_str = str(item)
+                if pd.notnull(item) and str(item).strip() != "":
+                    # Giả lập format số tiền để tính độ rộng chính xác
+                    if col in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]:
+                        try:
+                            val_str = f"{float(item):,.0f}".replace(",", ".")
+                        except: pass
+                item_w = pdf.get_string_width(val_str) + 4
+                if item_w > max_w:
+                    max_w = item_w
+            col_widths.append(max_w)
+        
+        # Bước 4b: Co giãn tỉ lệ để vừa khít 277mm (Khổ ngang A4 trừ lề)
+        total_w = sum(col_widths)
+        if total_w > 0:
+            scale = 277 / total_w
+            col_widths = [w * scale for w in col_widths]
+
+        # Bước 4c: In Header
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
+        pdf.set_fill_color(220, 220, 220)
+        for i, col in enumerate(df.columns):
+            header_str = str(col)
+            # Ép chữ cắt bớt nếu vẫn dài hơn cột (bảo hiểm chống chồng chữ)
+            while pdf.get_string_width(header_str) > col_widths[i] - 1 and len(header_str) > 0:
+                header_str = header_str[:-1]
+            pdf.cell(col_widths[i], 8, txt=header_str, border=1, fill=True, align='C')
         pdf.ln()
         
-        # Nội dung bảng
-        pdf.set_font(font_name, '', 10)
+        # Bước 4d: In Nội dung
+        pdf.set_font(font_name, '', 8)
         sum_tong_tien = 0 
         
         for _, row in df.iterrows():
-            for col_name, item in row.items():
-                val_str = str(item)
-                align_col = 'L' # Mặc định canh trái
+            for i, (col_name, item) in enumerate(row.items()):
+                val_str = str(item) if pd.notnull(item) else ""
+                align_col = 'L'
                 
-                # Format số tiền
-                try:
-                    if col_name in ["Số lượng", "Đơn giá", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and pd.notnull(item) and str(item).strip() != "":
+                if col_name in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and str(item).strip() != "":
+                    try:
                         val = float(item)
-                        val_str = f"{val:,.0f}".replace(",", ".") # Chuyển phẩy thành chấm (chuẩn VN)
-                        align_col = 'R' # Số tiền canh phải
-                        
+                        val_str = f"{val:,.0f}".replace(",", ".")
+                        align_col = 'R'
                         if col_name in ["Tổng tiền", "TỔNG CỘNG"]:
                             sum_tong_tien += val
-                except ValueError:
-                    pass
+                    except: pass
                 
-                pdf.cell(col_width, 10, txt=val_str, border=1, align=align_col)
+                # Ép chữ cắt bớt nếu vẫn dài hơn cột
+                while pdf.get_string_width(val_str) > col_widths[i] - 1 and len(val_str) > 0:
+                    val_str = val_str[:-1]
+
+                pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
             pdf.ln()
             
-        # Dòng TỔNG CỘNG cuối cùng
+        # Bước 4e: Dòng TỔNG CỘNG
         if "Tổng tiền" in df.columns or "TỔNG CỘNG" in df.columns:
-            pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+            pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
             
             for i, col in enumerate(df.columns):
                 if col in ["Tổng tiền", "TỔNG CỘNG"]:
                     tong_str = f"{sum_tong_tien:,.0f}".replace(",", ".")
-                    pdf.cell(col_width, 10, txt=tong_str, border=1, fill=True, align='R')
+                    pdf.cell(col_widths[i], 8, txt=tong_str, border=1, fill=True, align='R')
                 elif i == len(df.columns) - 2: 
-                    pdf.cell(col_width, 10, txt="TỔNG CỘNG:", border=1, fill=True, align='R')
+                    pdf.cell(col_widths[i], 8, txt="TỔNG CỘNG:", border=1, fill=True, align='R')
                 else:
-                    pdf.cell(col_width, 10, txt="", border=1, fill=True) 
+                    pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
             pdf.ln()
             
-    # Ghi ra file tạm và đọc lại thành bytes
+    # Xử lý file vật lý chống lỗi Crash FPDF
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     
@@ -212,7 +262,6 @@ with tab_A:
     
     if st.button("Tạo file PDF (Module A)"):
         df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
-        # Thay đổi Tiêu đề PDF truyền vào hàm
         pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
         col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
 
