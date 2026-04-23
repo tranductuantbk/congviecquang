@@ -4,11 +4,14 @@ from sqlalchemy import inspect
 
 st.set_page_config(page_title="Tính Giá Gia Công", layout="wide")
 
+# --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
 if not st.session_state.get("logged_in", False):
     st.warning("🔒 Bạn chưa đăng nhập! Vui lòng quay lại Trang Chủ (Home) để gõ mật khẩu.")
     st.stop()
 
-# KẾT NỐI NEON
+# ==========================================
+# KẾT NỐI NEON (POSTGRESQL)
+# ==========================================
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
@@ -33,25 +36,28 @@ def save_data_gc(data_list):
         df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
     except Exception: pass
 
-# KHỞI TẠO BỘ NHỚ
+# ==========================================
+# KHỞI TẠO BỘ NHỚ LƯU TRỮ
+# ==========================================
 if 'danh_sach_gc' not in st.session_state:
     st.session_state.danh_sach_gc = load_data_gc()
-
-if 'main_tabs_gc' not in st.session_state:
-    st.session_state.main_tabs_gc = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
 
 if 'is_editing_gc' not in st.session_state:
     st.session_state.is_editing_gc = False
     st.session_state.edit_index_gc = None
 
+# ---> ĐÂY LÀ CHÌA KHÓA ĐIỀU HƯỚNG MỚI ĐÃ SỬA LỖI <---
+if 'menu_gia_cong' not in st.session_state:
+    st.session_state.menu_gia_cong = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
+
 st.title("⚙️ MODULE: TÍNH GIÁ GIA CÔNG")
 
-# GIAO DIỆN ĐIỀU HƯỚNG DẠNG NÚT BẤM (CHỐNG LỖI)
-st.session_state.main_tabs_gc = st.radio(
+# Thanh Menu gắn chặt với chìa khóa "menu_gia_cong"
+st.radio(
     "Menu chức năng:", 
     ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH GIA CÔNG"], 
     horizontal=True, 
-    key="main_tabs_gc_radio",
+    key="menu_gia_cong",
     label_visibility="collapsed"
 )
 st.write("---")
@@ -59,12 +65,12 @@ st.write("---")
 # ==========================================
 # TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU
 # ==========================================
-if st.session_state.main_tabs_gc == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
+if st.session_state.menu_gia_cong == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
     if st.session_state.is_editing_gc:
         st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM GIA CÔNG**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state.is_editing_gc = False
-            # Dọn dẹp ô nhập liệu để nhập đồ mới
+            # Dọn dẹp ô nhập liệu
             for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
                 if k in st.session_state:
                     del st.session_state[k]
@@ -139,22 +145,25 @@ if st.session_state.main_tabs_gc == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 }
                 
                 if st.session_state.is_editing_gc:
+                    # Ghi đè vào dòng cũ
                     st.session_state.danh_sach_gc[st.session_state.edit_index_gc] = new_data
                     st.session_state.is_editing_gc = False
                     for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
                         if k in st.session_state:
                             del st.session_state[k]
                 else:
+                    # Thêm mới
                     st.session_state.danh_sach_gc.append(new_data)
                 
                 save_data_gc(st.session_state.danh_sach_gc)
-                st.session_state.main_tabs_gc = "📋 2. DANH SÁCH GIA CÔNG"
+                # KÍCH HOẠT NHẢY TAB
+                st.session_state.menu_gia_cong = "📋 2. DANH SÁCH GIA CÔNG"
                 st.rerun()
 
 # ==========================================
 # TAB 2: DANH SÁCH SẢN PHẨM GIA CÔNG
 # ==========================================
-elif st.session_state.main_tabs_gc == "📋 2. DANH SÁCH GIA CÔNG":
+elif st.session_state.menu_gia_cong == "📋 2. DANH SÁCH GIA CÔNG":
     st.subheader("📋 DANH SÁCH SẢN PHẨM ĐÃ LƯU")
     if st.session_state.danh_sach_gc:
         df = pd.DataFrame(st.session_state.danh_sach_gc)
@@ -190,7 +199,9 @@ elif st.session_state.main_tabs_gc == "📋 2. DANH SÁCH GIA CÔNG":
                 
                 st.session_state.is_editing_gc = True
                 st.session_state.edit_index_gc = idx
-                st.session_state.main_tabs_gc = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
+                
+                # KÍCH HOẠT NHẢY TAB
+                st.session_state.menu_gia_cong = "🧮 1. TÍNH TOÁN & NHẬP LIỆU"
                 st.rerun()
                 
             if c_btn2.button("🗑️ Xóa", use_container_width=True):
