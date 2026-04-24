@@ -26,21 +26,27 @@ def load_data_gc():
         df = pd.read_sql("SELECT * FROM wanchi_giacong", con=conn.engine)
         return df.to_dict('records') if not df.empty else []
     except Exception as e:
-        return []
+        # Xử lý lỗi Cold Start của Neon DB
+        st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
+        return None
 
 def save_data_gc(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Hệ số ĐL", "Hệ số TC", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"])
         df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
     except Exception: pass
 
 # ==========================================
 # KHỞI TẠO BỘ NHỚ LƯU TRỮ 
 # ==========================================
-if "danh_sach_gc" not in st.session_state:
+if "danh_sach_gc" not in st.session_state or st.session_state["danh_sach_gc"] is None:
     st.session_state["danh_sach_gc"] = load_data_gc()
+
+# Cứu cánh an toàn nếu DB chưa lên
+if st.session_state["danh_sach_gc"] is None:
+    st.session_state["danh_sach_gc"] = []
 
 if "confirm_delete_idx_gc" not in st.session_state:
     st.session_state["confirm_delete_idx_gc"] = None
@@ -135,11 +141,11 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.table(df_summary)
         
         st.markdown("---")
-        hs_dl = st.number_input("Hệ số LN ĐL", value=st.session_state.get("gc_hs_dl_in", 0.6), step=0.01, key="gc_hs_dl_in_ui")
+        hs_dl = st.number_input("Hệ số LN ĐL", value=st.session_state.get("gc_hs_dl_in", 0.6), min_value=0.01, step=0.01, key="gc_hs_dl_in_ui")
         gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
-        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("gc_hs_tc_in", 0.6), step=0.01, key="gc_hs_tc_in_ui")
+        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("gc_hs_tc_in", 0.6), min_value=0.01, step=0.01, key="gc_hs_tc_in_ui")
         gia_tieu_chuan = gia_dai_ly / hs_tc
         st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
 
@@ -172,6 +178,14 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
 # ==========================================
 elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
     st.subheader("📋 DANH SÁCH SẢN PHẨM ĐÃ LƯU")
+    
+    col_ref1, col_ref2 = st.columns([8, 2])
+    if col_ref2.button("🔄 Tải lại dữ liệu (Refresh)"):
+        st.session_state["danh_sach_gc"] = load_data_gc()
+        if st.session_state["danh_sach_gc"] is None:
+            st.session_state["danh_sach_gc"] = []
+        st.rerun()
+
     if st.session_state["danh_sach_gc"]:
         df = pd.DataFrame(st.session_state["danh_sach_gc"])
         cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"]
@@ -229,6 +243,5 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                     
         with col2:
             st.write("") # Dóng hàng
-            # Đã bỏ nút xóa toàn bộ danh sách theo yêu cầu
     else:
         st.info("Chưa có dữ liệu.")
