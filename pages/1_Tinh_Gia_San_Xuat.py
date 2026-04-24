@@ -85,13 +85,14 @@ st.write("---")
 # TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU
 # ==========================================
 if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
+    if st.session_state.get("sx_success_msg"):
+        st.success(st.session_state["sx_success_msg"])
+        st.session_state["sx_success_msg"] = ""
+
     if st.session_state["is_editing_sx"]:
         st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state["is_editing_sx"] = False
-            for k in ["sx_ma_in", "sx_ten_in", "sx_tl_in", "sx_gia_nhua_in", "sx_gia_may_in", "sx_chu_ky_in", "sx_sp_khuon_in", "sx_bao_bi_in", "sx_phu_kien_in", "sx_dg_pg_in", "sx_tl_pg_in", "sx_gia_khuon_in", "sx_sl_khuon_in", "sx_hs_dl_in", "sx_hs_tc_in"]:
-                if k in st.session_state:
-                    del st.session_state[k]
             st.rerun()
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
@@ -197,14 +198,15 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 if st.session_state["is_editing_sx"]:
                     st.session_state["danh_sach_sp"][st.session_state["edit_index_sx"]] = new_data
                     st.session_state["is_editing_sx"] = False
-                    for k in ["sx_ma_in", "sx_ten_in", "sx_tl_in", "sx_gia_nhua_in", "sx_gia_may_in", "sx_chu_ky_in", "sx_sp_khuon_in", "sx_bao_bi_in", "sx_phu_kien_in", "sx_dg_pg_in", "sx_tl_pg_in", "sx_gia_khuon_in", "sx_sl_khuon_in", "sx_hs_dl_in", "sx_hs_tc_in"]:
-                        if k in st.session_state:
-                            del st.session_state[k]
                 else:
                     st.session_state["danh_sach_sp"].append(new_data)
                 
                 save_data(st.session_state["danh_sach_sp"])
-                st.session_state["current_tab_sx"] = danh_sach_tabs[1]
+                
+                # Giữ nguyên dữ liệu trên form theo yêu cầu
+                
+                # Hiển thị thông báo thành công và KHÔNG NHẢY TAB
+                st.session_state["sx_success_msg"] = f"✅ Đã lưu sản phẩm '{ten_sp}' thành công! Bạn có thể nhập tiếp sản phẩm mới."
                 st.rerun()
 
 # ==========================================
