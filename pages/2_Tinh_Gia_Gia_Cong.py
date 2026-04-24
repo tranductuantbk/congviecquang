@@ -37,10 +37,13 @@ def save_data_gc(data_list):
     except Exception: pass
 
 # ==========================================
-# KHỞI TẠO BỘ NHỚ LƯU TRỮ (Dùng ngoặc vuông chuẩn để chống lỗi)
+# KHỞI TẠO BỘ NHỚ LƯU TRỮ 
 # ==========================================
 if "danh_sach_gc" not in st.session_state:
     st.session_state["danh_sach_gc"] = load_data_gc()
+
+if "confirm_delete_idx_gc" not in st.session_state:
+    st.session_state["confirm_delete_idx_gc"] = None
 
 if "is_editing_gc" not in st.session_state:
     st.session_state["is_editing_gc"] = False
@@ -57,7 +60,7 @@ def sync_tab():
 
 st.title("⚙️ MODULE: TÍNH GIÁ GIA CÔNG")
 
-# Thanh Menu an toàn (Tách biệt logic hiển thị và logic dữ liệu)
+# Thanh Menu an toàn
 st.radio(
     "Menu chức năng:", 
     danh_sach_tabs, 
@@ -209,16 +212,23 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                 st.rerun()
                 
             if c_btn2.button("🗑️ Xóa", use_container_width=True):
-                st.session_state["danh_sach_gc"].pop(idx)
-                save_data_gc(st.session_state["danh_sach_gc"])
-                st.rerun()
+                st.session_state["confirm_delete_idx_gc"] = idx
                 
+            # --- HIỆN HỘP THOẠI XÁC NHẬN ---
+            if st.session_state.get("confirm_delete_idx_gc") == idx:
+                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{st.session_state['danh_sach_gc'][idx]['Tên Sản Phẩm']}** không?")
+                col_yes, col_no = st.columns(2)
+                if col_yes.button("✔️ Đồng ý xóa", use_container_width=True, key=f"yes_del_gc"):
+                    st.session_state["danh_sach_gc"].pop(idx)
+                    save_data_gc(st.session_state["danh_sach_gc"])
+                    st.session_state["confirm_delete_idx_gc"] = None
+                    st.rerun()
+                if col_no.button("❌ Hủy", use_container_width=True, key=f"no_del_gc"):
+                    st.session_state["confirm_delete_idx_gc"] = None
+                    st.rerun()
+                    
         with col2:
-            st.write("") 
-            st.write("")
-            if st.button("🚨 Xóa toàn bộ danh sách", use_container_width=True):
-                st.session_state["danh_sach_gc"] = []
-                save_data_gc(st.session_state["danh_sach_gc"])
-                st.rerun()
+            st.write("") # Dóng hàng
+            # Đã bỏ nút xóa toàn bộ danh sách theo yêu cầu
     else:
         st.info("Chưa có dữ liệu.")
