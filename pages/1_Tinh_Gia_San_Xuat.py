@@ -51,6 +51,10 @@ if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
     st.session_state.edit_index = None
 
+# Trạng thái dùng để xác nhận xóa
+if 'confirm_delete_idx' not in st.session_state:
+    st.session_state.confirm_delete_idx = None
+
 # Hàm hỗ trợ lấy dữ liệu điền vào form khi đang ở chế độ Sửa
 def get_val(key, default_val):
     return st.session_state[key] if st.session_state.edit_mode and key in st.session_state else default_val
@@ -233,9 +237,20 @@ elif st.session_state.active_tab == "📋 2. DANH SÁCH SẢN PHẨM":
                 st.rerun()
                 
             if c_btn2.button("🗑️ Xóa", use_container_width=True):
-                st.session_state.danh_sach_sp.pop(idx)
-                save_data(st.session_state.danh_sach_sp)
-                st.rerun()
+                st.session_state.confirm_delete_idx = idx
+                
+            # --- HIỆN HỘP THOẠI XÁC NHẬN ---
+            if st.session_state.get("confirm_delete_idx") == idx:
+                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{st.session_state.danh_sach_sp[idx]['Tên Sản Phẩm']}** không?")
+                col_yes, col_no = st.columns(2)
+                if col_yes.button("✔️ Đồng ý xóa", use_container_width=True, key=f"yes_del"):
+                    st.session_state.danh_sach_sp.pop(idx)
+                    save_data(st.session_state.danh_sach_sp)
+                    st.session_state.confirm_delete_idx = None
+                    st.rerun()
+                if col_no.button("❌ Hủy", use_container_width=True, key=f"no_del"):
+                    st.session_state.confirm_delete_idx = None
+                    st.rerun()
     else:
         st.info("Chưa có dữ liệu.")
 
