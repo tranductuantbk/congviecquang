@@ -82,14 +82,14 @@ st.write("---")
 # TAB 1: TÍNH TOÁN VÀ NHẬP LIỆU
 # ==========================================
 if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
+    if st.session_state.get("gc_success_msg"):
+        st.success(st.session_state["gc_success_msg"])
+        st.session_state["gc_success_msg"] = ""
+
     if st.session_state["is_editing_gc"]:
         st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM GIA CÔNG**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state["is_editing_gc"] = False
-            # Dọn dẹp ô nhập liệu
-            for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
-                if k in st.session_state:
-                    del st.session_state[k]
             st.rerun()
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM GIA CÔNG")
@@ -163,14 +163,13 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 if st.session_state["is_editing_gc"]:
                     st.session_state["danh_sach_gc"][st.session_state["edit_index_gc"]] = new_data
                     st.session_state["is_editing_gc"] = False
-                    for k in ["gc_ma_in", "gc_ten_in", "gc_tl_in", "gc_gia_nhua_in", "gc_gia_may_in", "gc_chu_ky_in", "gc_sp_khuon_in", "gc_bao_bi_in", "gc_phu_kien_in", "gc_dg_pg_in", "gc_tl_pg_in", "gc_hs_dl_in", "gc_hs_tc_in"]:
-                        if k in st.session_state:
-                            del st.session_state[k]
                 else:
                     st.session_state["danh_sach_gc"].append(new_data)
                 
                 save_data_gc(st.session_state["danh_sach_gc"])
-                st.session_state["current_tab_gc"] = danh_sach_tabs[1] # Kích hoạt nhảy về Tab 2
+                
+                # Giữ nguyên dữ liệu trên form theo yêu cầu
+                st.session_state["gc_success_msg"] = f"✅ Đã lưu sản phẩm gia công '{ten_sp}' thành công! Bạn có thể nhập tiếp sản phẩm mới."
                 st.rerun()
 
 # ==========================================
@@ -243,5 +242,6 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                     
         with col2:
             st.write("") # Dóng hàng
+            # Đã bỏ nút xóa toàn bộ danh sách theo yêu cầu
     else:
         st.info("Chưa có dữ liệu.")
