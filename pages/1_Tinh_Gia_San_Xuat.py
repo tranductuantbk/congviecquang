@@ -166,7 +166,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
-        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("sx_hs_tc_in", 0.6), min_value=0.01, step=0.01, key="sx_hs_tc_in_ui")
+        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("sx_hs_tc_in", 0.55), min_value=0.01, step=0.01, key="sx_hs_tc_in_ui")
         gia_tieu_chuan = gia_dai_ly / hs_tc
         st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
 
@@ -255,7 +255,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                 st.session_state["sx_gia_khuon_in"] = int(sp.get("Giá trị khuôn", 0))
                 st.session_state["sx_sl_khuon_in"] = int(sp.get("SL khuôn", 10000))
                 st.session_state["sx_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
-                st.session_state["sx_hs_tc_in"] = float(sp.get("Hệ số TC", 0.6))
+                st.session_state["sx_hs_tc_in"] = float(sp.get("Hệ số TC", 0.55))
                 
                 st.session_state["is_editing_sx"] = True
                 st.session_state["edit_index_sx"] = idx
