@@ -35,7 +35,7 @@ def save_data(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Hệ số TC", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Hệ số TC", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
     except Exception as e:
         pass
@@ -57,7 +57,8 @@ if "is_editing_sx" not in st.session_state:
 if "confirm_delete_idx_sx" not in st.session_state:
     st.session_state["confirm_delete_idx_sx"] = None
 
-danh_sach_tabs = ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH SẢN PHẨM", "🧩 3. GHÉP BỘ"]
+# THÊM TAB ĐỊNH LƯỢNG VÀO DANH SÁCH
+danh_sach_tabs = ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH SẢN PHẨM", "🧩 3. GHÉP BỘ", "⚖️ 4. ĐỊNH LƯỢNG SẢN PHẨM"]
 
 if "current_tab_sx" not in st.session_state:
     st.session_state["current_tab_sx"] = danh_sach_tabs[0]
@@ -167,8 +168,8 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
         hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("sx_hs_tc_in", 0.55), min_value=0.01, step=0.01, key="sx_hs_tc_in_ui")
-        gia_tieu_chuan = gia_dai_ly / hs_tc
-        st.metric(label="Giá Tiêu chuẩn", value=f"{round(gia_tieu_chuan):,} VNĐ")
+        gia_cong_ty = gia_dai_ly / hs_tc
+        st.metric(label="Giá Công ty", value=f"{round(gia_cong_ty):,} VNĐ")
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
@@ -192,7 +193,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                     "Hệ số TC": hs_tc,
                     "Giá Vốn": round(gvhb),
                     "Giá Đại Lý": round(gia_dai_ly),
-                    "Giá Tiêu Chuẩn": round(gia_tieu_chuan)
+                    "Giá Công ty": round(gia_cong_ty)
                 }
                 
                 if st.session_state["is_editing_sx"]:
@@ -203,9 +204,6 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 
                 save_data(st.session_state["danh_sach_sp"])
                 
-                # Giữ nguyên dữ liệu trên form theo yêu cầu
-                
-                # Hiển thị thông báo thành công và KHÔNG NHẢY TAB
                 st.session_state["sx_success_msg"] = f"✅ Đã lưu sản phẩm '{ten_sp}' thành công! Bạn có thể nhập tiếp sản phẩm mới."
                 st.rerun()
 
@@ -225,7 +223,11 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
     if st.session_state["danh_sach_sp"]:
         df = pd.DataFrame(st.session_state["danh_sach_sp"])
         
-        cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Tiêu Chuẩn"]
+        cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"]
+        # Hỗ trợ hiển thị đúng nếu dữ liệu cũ còn lưu cột "Giá Tiêu Chuẩn"
+        if "Giá Tiêu Chuẩn" in df.columns and "Giá Công ty" not in df.columns:
+            df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
+            
         df_display = df[[c for c in cols_to_show if c in df.columns]]
         st.dataframe(df_display, use_container_width=True)
         
@@ -243,7 +245,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                 
                 st.session_state["sx_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["sx_ten_in"] = sp.get("Tên Sản Phẩm", "")
-                st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0))
+                st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
                 st.session_state["sx_gia_nhua_in"] = int(sp.get("Đơn giá nhựa", 23000))
                 st.session_state["sx_gia_may_in"] = int(sp.get("Giá máy", 1700000))
                 st.session_state["sx_chu_ky_in"] = float(sp.get("Chu kỳ", 40.0))
@@ -282,7 +284,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
 # ==========================================
 # TAB 3: GHÉP BỘ
 # ==========================================
-else:
+elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
     st.subheader("🧩 THÔNG TIN BỘ SẢN PHẨM")
     col_info1_bo, col_info2_bo = st.columns(2)
     ma_bo = col_info1_bo.text_input("1. Mã Bộ sản phẩm", placeholder="VD: BO001", key="ma_bo")
@@ -332,8 +334,8 @@ else:
         st.metric(label="Giá Đại lý Bộ", value=f"{round(gia_dl_bo):,} VNĐ")
 
         hs_tc_bo = st.number_input("Hệ số LN TC (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
-        gia_tc_bo = gia_dl_bo / hs_tc_bo
-        st.metric(label="Giá Tiêu chuẩn Bộ", value=f"{round(gia_tc_bo):,} VNĐ")
+        gia_cong_ty_bo = gia_dl_bo / hs_tc_bo
+        st.metric(label="Giá Công ty Bộ", value=f"{round(gia_cong_ty_bo):,} VNĐ")
         
         st.write("---")
         st.markdown("**Phân tích giá thành bộ:**")
@@ -347,13 +349,55 @@ else:
             if ma_bo == "" or ten_bo == "":
                 st.warning("⚠️ Vui lòng nhập Mã và Tên bộ sản phẩm!")
             else:
+                # TÌM TRỌNG LƯỢNG TỪ SẢN PHẨM GỐC
+                tl_than = next((s.get("Trọng lượng", 0) for s in st.session_state["danh_sach_sp"] if s["Tên Sản Phẩm"] == chon_than), 0)
+                tl_nap = next((s.get("Trọng lượng", 0) for s in st.session_state["danh_sach_sp"] if s["Tên Sản Phẩm"] == chon_nap), 0)
+                
                 san_pham_moi_bo = {
                     "Mã SP": ma_bo,
                     "Tên Sản Phẩm": f"[BỘ] {ten_bo}",
+                    "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g",
                     "Giá Vốn": round(gvhb_bo),
                     "Giá Đại Lý": round(gia_dl_bo),
-                    "Giá Tiêu Chuẩn": round(gia_tc_bo)
+                    "Giá Công ty": round(gia_cong_ty_bo)
                 }
                 st.session_state["danh_sach_sp"].append(san_pham_moi_bo)
                 save_data(st.session_state["danh_sach_sp"])
                 st.success(f"✅ Đã lưu bộ ghép lên đám mây: {ten_bo}")
+
+# ==========================================
+# TAB 4: ĐỊNH LƯỢNG SẢN PHẨM
+# ==========================================
+elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PHẨM":
+    st.subheader("⚖️ BẢNG ĐỊNH LƯỢNG SẢN PHẨM")
+    
+    col_ref3, col_ref4 = st.columns([8, 2])
+    if col_ref4.button("🔄 Tải lại dữ liệu"):
+        st.session_state["danh_sach_sp"] = load_data()
+        st.rerun()
+    
+    if st.session_state["danh_sach_sp"]:
+        du_lieu_hien_thi = []
+        
+        for sp in st.session_state["danh_sach_sp"]:
+            ma_sp = sp.get("Mã SP", "")
+            ten_sp = sp.get("Tên Sản Phẩm", "")
+            trong_luong = sp.get("Trọng lượng", "")
+            
+            if isinstance(trong_luong, (int, float)):
+                tl_hien_thi = f"{trong_luong} g"
+            elif isinstance(trong_luong, str):
+                tl_hien_thi = trong_luong
+            else:
+                tl_hien_thi = "N/A"
+                
+            du_lieu_hien_thi.append({
+                "Mã SP": ma_sp,
+                "Tên Sản Phẩm": ten_sp,
+                "Định Lượng (Trọng lượng)": tl_hien_thi
+            })
+            
+        df_dinh_luong = pd.DataFrame(du_lieu_hien_thi)
+        st.dataframe(df_dinh_luong, use_container_width=True)
+    else:
+        st.info("Chưa có dữ liệu sản phẩm.")
