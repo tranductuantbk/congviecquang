@@ -163,13 +163,20 @@ def load_data(table_name, columns):
     except Exception:
         return pd.DataFrame(columns=columns)
 
-# --- TỐI ƯU HÓA HÀM THÊM MỚI (TỐC ĐỘ CHỚP NHOÁNG) ---
-def append_data(new_row_dict, table_name):
+# --- TỐI ƯU HÓA HÀM THÊM MỚI TỰ ĐỘNG CHUẨN HÓA CẤU TRÚC ---
+def append_data(new_row_dict, table_name, df_current):
     try:
         df_new = pd.DataFrame([new_row_dict])
+        # Thử chèn nhanh
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
-    except Exception as e:
-        st.error(f"⚠️ Lỗi khi thêm dữ liệu mới ({table_name}): {str(e)}")
+    except Exception:
+        # Nếu bị lỗi (chủ yếu do thay đổi tên cột như trường hợp Cụm khuôn hoàn chỉnh)
+        # Sẽ tự động gộp dữ liệu cũ + mới và ghi đè lại cấu trúc bảng mới lên DB
+        try:
+            df_combined = pd.concat([df_current, pd.DataFrame([new_row_dict])], ignore_index=True)
+            df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
+        except Exception as e2:
+            st.error(f"⚠️ Lỗi cấu trúc khi thêm dữ liệu mới ({table_name}): {str(e2)}")
 
 # --- TỐI ƯU HÓA HÀM CẬP NHẬT DỮ LIỆU ---
 def save_data(df, table_name):
@@ -250,7 +257,7 @@ with tab_A:
                 with st.spinner("⏳ Đang chèn dữ liệu mới..."):
                     new_row = {"Ngày": ngay_a.strftime('%d/%m/%Y'), "Nhà cung cấp NVL": ncc_a, "Mã khuôn": ma_khuon_a.strip().upper(), 
                                "Tên NVL": ten_nvl, "Quy cách": quy_cach, "Số lượng": sl_a, "Đơn giá": don_gia_a, "Tổng tiền": tong_tien_a}
-                    append_data(new_row, "wanchi_a")
+                    append_data(new_row, "wanchi_a", df_A)
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu (Cho phép chỉnh sửa/xóa trực tiếp)")
@@ -299,12 +306,12 @@ with tab_B:
             tong_tien_b = c4.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000, key="tong_tien_b")
             
             if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
-                with st.spinner("⏳ Đang chèn dữ liệu mới..."):
+                with st.spinner("⏳ Đang cập nhật lại cấu trúc bảng mới trên Cloud..."):
                     new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
                                  "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
                                  "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
                                  "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
-                    append_data(new_row_b, "wanchi_b")
+                    append_data(new_row_b, "wanchi_b", df_B)
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Gia Công")
@@ -347,7 +354,7 @@ with tab_C:
                 with st.spinner("⏳ Đang chèn dữ liệu mới..."):
                     new_row_c = {"Ngày": ngay_c.strftime('%d/%m/%Y'), "Nhà cung cấp vật tư": ncc_c, "Mã khuôn": ma_khuon_c.strip().upper(),
                                  "Tên linh kiện": ten_lk, "Đơn giá": don_gia_c, "Tổng tiền": tong_tien_c}
-                    append_data(new_row_c, "wanchi_c")
+                    append_data(new_row_c, "wanchi_c", df_C)
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Vật Tư")
@@ -403,7 +410,7 @@ with tab_D:
                             df_D.at[idx, k] = v
                         save_data(df_D, "wanchi_d")
                     else:
-                        append_data(new_row_D, "wanchi_d")
+                        append_data(new_row_D, "wanchi_d", df_D)
             st.success("✅ Đã tính toán xong và đồng bộ lên DB!")
             st.rerun()
 
