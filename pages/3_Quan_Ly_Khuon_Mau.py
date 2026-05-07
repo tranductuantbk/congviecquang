@@ -76,13 +76,16 @@ def export_pdf(df, title):
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         
+        # Danh sách các cột cần format dạng số tiền và căn phải
+        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn"]
+        
         col_widths = []
         for col in df_export.columns:
             max_w = pdf.get_string_width(str(col)) + 4 
             for item in df_export[col]:
                 val_str = str(item)
                 if pd.notnull(item) and str(item).strip() != "":
-                    if col in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]:
+                    if col in num_cols:
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
                         except: pass
@@ -113,12 +116,12 @@ def export_pdf(df, title):
                 val_str = str(item) if pd.notnull(item) else ""
                 align_col = 'L'
                 
-                if col_name in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and str(item).strip() != "":
+                if col_name in num_cols and str(item).strip() != "":
                     try:
                         val = float(item)
                         val_str = f"{val:,.0f}".replace(",", ".")
                         align_col = 'R'
-                        if col_name in ["Tổng tiền", "TỔNG CỘNG"]:
+                        if col_name in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]:
                             sum_tong_tien += val
                     except: pass
                 
@@ -128,12 +131,12 @@ def export_pdf(df, title):
                 pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
             pdf.ln()
             
-        if "Tổng tiền" in df_export.columns or "TỔNG CỘNG" in df_export.columns:
+        if any(c in df_export.columns for c in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]):
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
             
             for i, col in enumerate(df_export.columns):
-                if col in ["Tổng tiền", "TỔNG CỘNG"]:
+                if col in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]:
                     tong_str = f"{sum_tong_tien:,.0f}".replace(",", ".")
                     pdf.cell(col_widths[i], 8, txt=tong_str, border=1, fill=True, align='R')
                 elif i == len(df_export.columns) - 2: 
@@ -161,33 +164,27 @@ def export_pdf(df, title):
 @st.cache_data(show_spinner=False, ttl=86400) # Lưu trong RAM 1 ngày
 def fetch_data_from_db(table_name):
     try:
-        # Lệnh gọi này chỉ chạy 1 lần duy nhất, các lần gõ phím sau sẽ lấy từ RAM
         return conn.query(f"SELECT * FROM {table_name}", ttl=0)
     except Exception:
         return pd.DataFrame()
 
 def force_reload_cache():
-    # Hàm này dùng để xóa bộ nhớ RAM, ép app tải lại từ DB ngay sau khi có chỉnh sửa
     fetch_data_from_db.clear()
 
 def load_data(table_name, columns):
     df = fetch_data_from_db(table_name)
     if df.empty:
         return pd.DataFrame(columns=columns)
-    
-    # Bổ sung các cột bị thiếu nếu DB chưa cập nhật cấu trúc
     for col in columns:
         if col not in df.columns:
             df[col] = None
-    
     return df
 
-# --- TỐI ƯU HÓA HÀM THÊM MỚI (TỰ CHUẨN HÓA CẤU TRÚC) ---
 def append_data(new_row_dict, table_name, df_current):
     try:
         df_new = pd.DataFrame([new_row_dict])
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
-        force_reload_cache() # Thêm xong -> Xóa Cache -> Load lại cực nhanh
+        force_reload_cache()
     except Exception:
         try:
             df_combined = pd.concat([df_current, pd.DataFrame([new_row_dict])], ignore_index=True)
@@ -196,7 +193,6 @@ def append_data(new_row_dict, table_name, df_current):
         except Exception as e2:
             st.error(f"⚠️ Lỗi cấu trúc: {str(e2)}")
 
-# --- TỐI ƯU HÓA HÀM CẬP NHẬT (GHI ĐÈ TỪ BẢNG) ---
 def save_data(df, table_name):
     try:
         try:
@@ -206,7 +202,7 @@ def save_data(df, table_name):
             df.to_sql(table_name, con=conn.engine, if_exists='append', index=False, method='multi')
         except Exception:
             df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
-        force_reload_cache() # Lưu xong -> Xóa Cache -> Load lại đồng bộ
+        force_reload_cache()
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
@@ -220,7 +216,6 @@ df_A = load_data("wanchi_a", cols_A)
 cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
 
-# Xử lý đồng bộ hóa tên cột trong RAM nếu DB vẫn dùng tên cũ
 if "Đơn giá" in df_B.columns:
     df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
 if "Ráp khuôn hoàn thiện" in df_B.columns:
@@ -249,11 +244,12 @@ list_molds_master = sorted(list(all_molds_set))
 st.title("🏭 Công Cụ Quản Lý Khuôn Mẫu WANCHI")
 st.markdown("---")
 
-tab_A, tab_B, tab_C, tab_D = st.tabs([
+tab_A, tab_B, tab_C, tab_D, tab_E = st.tabs([
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
-    "D. Tổng Giá Khuôn"
+    "D. Tổng Giá Khuôn",
+    "E. Danh Sách Khuôn"
 ])
 
 # ------------------------------------------
@@ -381,7 +377,7 @@ with tab_C:
                     append_data(new_row_c, "wanchi_c", df_C)
                 st.rerun()
 
-    st.subheader("Bảng Dữ Liệu Vật Tư")
+    st.subheader("Bảng Dữ Tại Vật Tư")
     edited_C = st.data_editor(df_C, num_rows="dynamic", use_container_width=True, key="edit_C")
     if st.button("💾 Cập nhật dữ liệu C (Lên Neon)"):
         with st.spinner("⏳ Đang đồng bộ cập nhật lên Cloud..."):
@@ -458,3 +454,79 @@ with tab_D:
             df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
             pdf_d = export_pdf(df_export_d, f"BẢNG TỔNG HỢP CHI PHÍ KHUÔN {filter_pdf_d}")
         col_pdf2_d.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
+
+
+# ------------------------------------------
+# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP
+# ------------------------------------------
+with tab_E:
+    st.header("E. Danh Sách Các Khuôn Đã Làm")
+    st.markdown("Bảng tóm tắt tự động thu thập ngày bắt đầu làm khuôn (ngày sớm nhất nhập vật liệu/gia công) và tổng giá trị cho từng mã khuôn.")
+    
+    # Tạo dữ liệu động cho Tab E
+    danh_sach_khuon_data = []
+    for mk in list_molds_master:
+        # 1. Tìm ngày làm khuôn (Ngày sớm nhất được ghi nhận trong các module)
+        dates = []
+        for df_temp in [df_A, df_B, df_C]:
+            if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
+                mold_dates = df_temp[df_temp['Mã khuôn'] == mk]['Ngày'].dropna().tolist()
+                dates.extend(mold_dates)
+        
+        ngay_lam = ""
+        if dates:
+            parsed_dates = []
+            for d in dates:
+                try:
+                    parsed_dates.append(datetime.strptime(str(d), '%d/%m/%Y'))
+                except:
+                    pass
+            if parsed_dates:
+                ngay_lam = min(parsed_dates).strftime('%d/%m/%Y')
+        
+        # 2. Lấy Tổng Giá Trị Khuôn
+        tong_gia = 0
+        if not df_D.empty and 'Mã khuôn' in df_D.columns:
+            row_d = df_D[df_D['Mã khuôn'] == mk]
+            if not row_d.empty:
+                tong_gia = row_d['TỔNG CỘNG'].values[0]
+        
+        # Tính dự phòng nếu chưa nhấn nút tính ở Tab D
+        if tong_gia == 0:
+            sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
+            sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
+            sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
+            tong_gia = sum_A + sum_B + sum_C
+            
+        danh_sach_khuon_data.append({
+            "Ngày làm khuôn": ngay_lam,
+            "Mã khuôn": mk,
+            "Tổng giá trị khuôn": tong_gia
+        })
+        
+    df_E = pd.DataFrame(danh_sach_khuon_data)
+    
+    if not df_E.empty:
+        # Căn chỉnh để cột tiền tệ hiển thị rõ ràng hơn
+        st.dataframe(
+            df_E,
+            column_config={
+                "Tổng giá trị khuôn": st.column_config.NumberColumn(
+                    "Tổng giá trị khuôn (VNĐ)",
+                    format="%d",
+                    help="Được tổng hợp tự động từ Tab D"
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        st.markdown("---")
+        st.subheader("📥 Xuất Báo Cáo PDF Danh Sách Khuôn")
+        
+        if st.button("Tạo file PDF (Module E)"):
+            with st.spinner("Đang trích xuất file PDF..."):
+                pdf_e = export_pdf(df_E, "DANH SÁCH TỔNG HỢP CÁC KHUÔN ĐÃ LÀM")
+            st.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_e, "WANCHI_DanhSachKhuon.pdf", "application/pdf")
+    else:
+        st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
