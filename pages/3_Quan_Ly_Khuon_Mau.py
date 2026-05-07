@@ -27,7 +27,7 @@ def remove_accents(input_str):
 
 # ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP <---
 def export_pdf(df, title):
-    # Tạo bản sao dữ liệu để xử lý riêng cho PDF, loại bỏ cột giá nội bộ nếu có
+    # Tạo bản sao dữ liệu để xử lý riêng cho PDF, loại bỏ cột giá nội bộ bảo mật
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
         df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
@@ -153,32 +153,50 @@ def export_pdf(df, title):
         
     return pdf_bytes
 
-# --- TỐI ƯU HÓA HÀM TẢI DỮ LIỆU ---
-def load_data(table_name, columns):
-    try:
-        df = conn.query(f"SELECT * FROM {table_name}", ttl=0)
-        if df.empty:
-            return pd.DataFrame(columns=columns)
-        return df
-    except Exception:
-        return pd.DataFrame(columns=columns)
 
-# --- TỐI ƯU HÓA HÀM THÊM MỚI TỰ ĐỘNG CHUẨN HÓA CẤU TRÚC ---
+# ==========================================
+# KIẾN TRÚC BỘ NHỚ ĐỆM (CACHE) CỰC NHANH
+# ==========================================
+
+@st.cache_data(show_spinner=False, ttl=86400) # Lưu trong RAM 1 ngày
+def fetch_data_from_db(table_name):
+    try:
+        # Lệnh gọi này chỉ chạy 1 lần duy nhất, các lần gõ phím sau sẽ lấy từ RAM
+        return conn.query(f"SELECT * FROM {table_name}", ttl=0)
+    except Exception:
+        return pd.DataFrame()
+
+def force_reload_cache():
+    # Hàm này dùng để xóa bộ nhớ RAM, ép app tải lại từ DB ngay sau khi có chỉnh sửa
+    fetch_data_from_db.clear()
+
+def load_data(table_name, columns):
+    df = fetch_data_from_db(table_name)
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+    
+    # Bổ sung các cột bị thiếu nếu DB chưa cập nhật cấu trúc
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None
+    
+    return df
+
+# --- TỐI ƯU HÓA HÀM THÊM MỚI (TỰ CHUẨN HÓA CẤU TRÚC) ---
 def append_data(new_row_dict, table_name, df_current):
     try:
         df_new = pd.DataFrame([new_row_dict])
-        # Thử chèn nhanh
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
+        force_reload_cache() # Thêm xong -> Xóa Cache -> Load lại cực nhanh
     except Exception:
-        # Nếu bị lỗi (chủ yếu do thay đổi tên cột như trường hợp Cụm khuôn hoàn chỉnh)
-        # Sẽ tự động gộp dữ liệu cũ + mới và ghi đè lại cấu trúc bảng mới lên DB
         try:
             df_combined = pd.concat([df_current, pd.DataFrame([new_row_dict])], ignore_index=True)
             df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
+            force_reload_cache()
         except Exception as e2:
-            st.error(f"⚠️ Lỗi cấu trúc khi thêm dữ liệu mới ({table_name}): {str(e2)}")
+            st.error(f"⚠️ Lỗi cấu trúc: {str(e2)}")
 
-# --- TỐI ƯU HÓA HÀM CẬP NHẬT DỮ LIỆU ---
+# --- TỐI ƯU HÓA HÀM CẬP NHẬT (GHI ĐÈ TỪ BẢNG) ---
 def save_data(df, table_name):
     try:
         try:
@@ -188,8 +206,10 @@ def save_data(df, table_name):
             df.to_sql(table_name, con=conn.engine, if_exists='append', index=False, method='multi')
         except Exception:
             df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
+        force_reload_cache() # Lưu xong -> Xóa Cache -> Load lại đồng bộ
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
+
 
 # ==========================================
 # KHỞI TẠO DỮ LIỆU TỪ DB & XỬ LÝ CỘT
@@ -200,6 +220,7 @@ df_A = load_data("wanchi_a", cols_A)
 cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
 
+# Xử lý đồng bộ hóa tên cột trong RAM nếu DB vẫn dùng tên cũ
 if "Đơn giá" in df_B.columns:
     df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
 if "Ráp khuôn hoàn thiện" in df_B.columns:
@@ -220,6 +241,7 @@ if not df_B.empty: all_molds_set.update(df_B["Mã khuôn"].dropna().unique())
 if not df_C.empty: all_molds_set.update(df_C["Mã khuôn"].dropna().unique())
 if not df_D.empty: all_molds_set.update(df_D["Mã khuôn"].dropna().unique())
 list_molds_master = sorted(list(all_molds_set))
+
 
 # ==========================================
 # GIAO DIỆN CHÍNH
@@ -279,6 +301,7 @@ with tab_A:
             pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
         col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
 
+
 # ------------------------------------------
 # MODULE B: GIA CÔNG
 # ------------------------------------------
@@ -306,7 +329,7 @@ with tab_B:
             tong_tien_b = c4.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000, key="tong_tien_b")
             
             if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
-                with st.spinner("⏳ Đang cập nhật lại cấu trúc bảng mới trên Cloud..."):
+                with st.spinner("⏳ Đang xử lý đồng bộ cơ sở dữ liệu..."):
                     new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
                                  "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
                                  "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
@@ -332,6 +355,7 @@ with tab_B:
             df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
             pdf_b = export_pdf(df_export_b, f"BÁO CÁO CHI PHÍ GIA CÔNG KHUÔN {filter_pdf_b}")
         col_pdf4.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
+
 
 # ------------------------------------------
 # MODULE C: VẬT TƯ
@@ -375,6 +399,7 @@ with tab_C:
             df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
             pdf_c = export_pdf(df_export_c, f"BÁO CÁO VẬT TƯ KHUÔN {filter_pdf_c}")
         col_pdf6.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
+
 
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
