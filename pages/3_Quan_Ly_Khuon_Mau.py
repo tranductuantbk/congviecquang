@@ -7,7 +7,7 @@ if not st.session_state.get("logged_in", False):
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
-from sqlalchemy import inspect
+from sqlalchemy import text # Bổ sung text để chạy SQL thuần tối ưu tốc độ
 import os
 
 # ==========================================
@@ -31,7 +31,6 @@ def export_pdf(df, title):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
-    # Nạp font tiếng Việt
     try:
         pdf.add_font('ArialVN', '', 'arial.ttf', uni=True)
         pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True)
@@ -40,18 +39,16 @@ def export_pdf(df, title):
         font_name = 'Arial'
         st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
-    # 1. THÊM LOGO
-    logo_path = "logo.png" # Bắt buộc phải có file logo.png nằm cùng thư mục
+    logo_path = "logo.png" 
     try:
         if os.path.exists(logo_path):
             pdf.image(logo_path, x=10, y=8, w=35)
-            start_x = 50 # Đẩy chữ sang phải nhường chỗ cho logo
+            start_x = 50 
         else:
             start_x = 10
     except:
         start_x = 10
 
-    # 2. THÔNG TIN CÔNG TY
     pdf.set_xy(start_x, 10)
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 14)
     pdf.cell(0, 6, txt="WANCHI", ln=True, align='L')
@@ -63,9 +60,8 @@ def export_pdf(df, title):
     pdf.set_x(start_x)
     pdf.cell(0, 5, txt="SĐT: 0902.580.828 - 0937.572.577", ln=True, align='L')
     
-    pdf.ln(10) # Tạo khoảng trống
+    pdf.ln(10)
 
-    # 3. TIÊU ĐỀ BÁO CÁO
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     pdf.cell(0, 10, txt=title.upper(), ln=True, align='C')
     
@@ -73,18 +69,15 @@ def export_pdf(df, title):
     pdf.cell(0, 8, txt=f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
     pdf.ln(5)
 
-    # 4. VẼ BẢNG VÀ CÂN CỘT TỰ ĐỘNG
     if not df.empty:
-        pdf.set_font(font_name, '', 8) # Đưa font bảng về size 8 để không bị tràn chữ
+        pdf.set_font(font_name, '', 8)
         
-        # Bước 4a: Tính toán độ rộng cần thiết cho từng cột
         col_widths = []
         for col in df.columns:
-            max_w = pdf.get_string_width(str(col)) + 4 # Cộng 4mm lề
+            max_w = pdf.get_string_width(str(col)) + 4 
             for item in df[col]:
                 val_str = str(item)
                 if pd.notnull(item) and str(item).strip() != "":
-                    # Giả lập format số tiền để tính độ rộng chính xác
                     if col in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]:
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
@@ -94,24 +87,20 @@ def export_pdf(df, title):
                     max_w = item_w
             col_widths.append(max_w)
         
-        # Bước 4b: Co giãn tỉ lệ để vừa khít 277mm (Khổ ngang A4 trừ lề)
         total_w = sum(col_widths)
         if total_w > 0:
             scale = 277 / total_w
             col_widths = [w * scale for w in col_widths]
 
-        # Bước 4c: In Header
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
         pdf.set_fill_color(220, 220, 220)
         for i, col in enumerate(df.columns):
             header_str = str(col)
-            # Ép chữ cắt bớt nếu vẫn dài hơn cột (bảo hiểm chống chồng chữ)
             while pdf.get_string_width(header_str) > col_widths[i] - 1 and len(header_str) > 0:
                 header_str = header_str[:-1]
             pdf.cell(col_widths[i], 8, txt=header_str, border=1, fill=True, align='C')
         pdf.ln()
         
-        # Bước 4d: In Nội dung
         pdf.set_font(font_name, '', 8)
         sum_tong_tien = 0 
         
@@ -129,14 +118,12 @@ def export_pdf(df, title):
                             sum_tong_tien += val
                     except: pass
                 
-                # Ép chữ cắt bớt nếu vẫn dài hơn cột
                 while pdf.get_string_width(val_str) > col_widths[i] - 1 and len(val_str) > 0:
                     val_str = val_str[:-1]
 
                 pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
             pdf.ln()
             
-        # Bước 4e: Dòng TỔNG CỘNG
         if "Tổng tiền" in df.columns or "TỔNG CỘNG" in df.columns:
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
@@ -151,7 +138,6 @@ def export_pdf(df, title):
                     pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
             pdf.ln()
             
-    # Xử lý file vật lý chống lỗi Crash FPDF
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     
@@ -163,24 +149,31 @@ def export_pdf(df, title):
         
     return pdf_bytes
 
-# Hàm tải dữ liệu từ Neon DB
+# --- TỐI ƯU HÓA HÀM TẢI DỮ LIỆU ---
 def load_data(table_name, columns):
     try:
-        inspector = inspect(conn.engine)
-        if not inspector.has_table(table_name):
-            return pd.DataFrame(columns=columns)
-            
         df = conn.query(f"SELECT * FROM {table_name}", ttl=0)
         if df.empty:
             return pd.DataFrame(columns=columns)
         return df
-    except Exception as e:
+    except Exception:
+        # Nếu bảng chưa tồn tại, Neon sẽ trả lỗi, ta bắt lỗi và trả về bảng trống nhanh chóng
         return pd.DataFrame(columns=columns)
 
-# Hàm lưu dữ liệu lên Neon DB
+# --- TỐI ƯU HÓA HÀM LƯU DỮ LIỆU (TỐC ĐỘ CAO) ---
 def save_data(df, table_name):
     try:
-        df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
+        # Thay vì Pandas drop bảng cũ rồi tạo lại (Rất chậm qua mạng cloud)
+        # Bước 1: Thử làm rỗng dữ liệu cũ bằng TRUNCATE (Siêu nhanh, giữ nguyên cấu trúc bảng)
+        try:
+            with conn.session as session:
+                session.execute(text(f"TRUNCATE TABLE {table_name}"))
+                session.commit()
+            # Bước 2: Insert toàn bộ dữ liệu mới vào bằng phương thức gộp (multi)
+            df.to_sql(table_name, con=conn.engine, if_exists='append', index=False, method='multi')
+        except Exception:
+            # Nếu xảy lỗi (ví dụ: Bảng chưa từng được tạo lần nào), dùng replace để khởi tạo bảng
+            df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
@@ -245,17 +238,19 @@ with tab_A:
             tong_tien_a = c8.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000)
             
             if st.form_submit_button("Lưu Dữ Liệu NVL"):
-                new_row = {"Ngày": ngay_a.strftime('%d/%m/%Y'), "Nhà cung cấp NVL": ncc_a, "Mã khuôn": ma_khuon_a.strip().upper(), 
-                           "Tên NVL": ten_nvl, "Quy cách": quy_cach, "Số lượng": sl_a, "Đơn giá": don_gia_a, "Tổng tiền": tong_tien_a}
-                df_A = pd.concat([df_A, pd.DataFrame([new_row])], ignore_index=True)
-                save_data(df_A, "wanchi_a")
+                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                    new_row = {"Ngày": ngay_a.strftime('%d/%m/%Y'), "Nhà cung cấp NVL": ncc_a, "Mã khuôn": ma_khuon_a.strip().upper(), 
+                               "Tên NVL": ten_nvl, "Quy cách": quy_cach, "Số lượng": sl_a, "Đơn giá": don_gia_a, "Tổng tiền": tong_tien_a}
+                    df_A = pd.concat([df_A, pd.DataFrame([new_row])], ignore_index=True)
+                    save_data(df_A, "wanchi_a")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu (Cho phép chỉnh sửa/xóa trực tiếp)")
     edited_A = st.data_editor(df_A, num_rows="dynamic", use_container_width=True, key="edit_A")
     if st.button("💾 Cập nhật dữ liệu A (Lên Neon)"):
-        save_data(edited_A, "wanchi_a")
-        st.success("Đã đồng bộ lên cơ sở dữ liệu!")
+        with st.spinner("⏳ Đang đồng bộ cập nhật lên Cloud, vui lòng đợi..."):
+            save_data(edited_A, "wanchi_a")
+        st.success("✅ Đã đồng bộ lên cơ sở dữ liệu!")
         st.rerun()
         
     st.markdown("---")
@@ -264,8 +259,9 @@ with tab_A:
     filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_a")
     
     if st.button("Tạo file PDF (Module A)"):
-        df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
-        pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
+            pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
         col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
 
 # ------------------------------------------
@@ -295,19 +291,21 @@ with tab_B:
             tong_tien_b = c4.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000, key="tong_tien_b")
             
             if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
-                new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
-                             "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
-                             "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
-                             "Ráp khuôn hoàn thiện": rap_khuon, "Tổng tiền": tong_tien_b}
-                df_B = pd.concat([df_B, pd.DataFrame([new_row_b])], ignore_index=True)
-                save_data(df_B, "wanchi_b")
+                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                    new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
+                                 "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
+                                 "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
+                                 "Ráp khuôn hoàn thiện": rap_khuon, "Tổng tiền": tong_tien_b}
+                    df_B = pd.concat([df_B, pd.DataFrame([new_row_b])], ignore_index=True)
+                    save_data(df_B, "wanchi_b")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Gia Công")
     edited_B = st.data_editor(df_B, num_rows="dynamic", use_container_width=True, key="edit_B")
     if st.button("💾 Cập nhật dữ liệu B (Lên Neon)"):
-        save_data(edited_B, "wanchi_b")
-        st.success("Đã đồng bộ lên cơ sở dữ liệu!")
+        with st.spinner("⏳ Đang đồng bộ cập nhật lên Cloud..."):
+            save_data(edited_B, "wanchi_b")
+        st.success("✅ Đã đồng bộ lên cơ sở dữ liệu!")
         st.rerun()
 
     st.markdown("---")
@@ -316,8 +314,9 @@ with tab_B:
     filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_b")
     
     if st.button("Tạo file PDF (Module B)"):
-        df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
-        pdf_b = export_pdf(df_export_b, f"BÁO CÁO CHI PHÍ GIA CÔNG KHUÔN {filter_pdf_b}")
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
+            pdf_b = export_pdf(df_export_b, f"BÁO CÁO CHI PHÍ GIA CÔNG KHUÔN {filter_pdf_b}")
         col_pdf4.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
 
 # ------------------------------------------
@@ -338,17 +337,19 @@ with tab_C:
             tong_tien_c = c6.number_input("Tổng tiền", min_value=0, step=1000, key="tt_c")
             
             if st.form_submit_button("Lưu Dữ Liệu Vật Tư"):
-                new_row_c = {"Ngày": ngay_c.strftime('%d/%m/%Y'), "Nhà cung cấp vật tư": ncc_c, "Mã khuôn": ma_khuon_c.strip().upper(),
-                             "Tên linh kiện": ten_lk, "Đơn giá": don_gia_c, "Tổng tiền": tong_tien_c}
-                df_C = pd.concat([df_C, pd.DataFrame([new_row_c])], ignore_index=True)
-                save_data(df_C, "wanchi_c")
+                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                    new_row_c = {"Ngày": ngay_c.strftime('%d/%m/%Y'), "Nhà cung cấp vật tư": ncc_c, "Mã khuôn": ma_khuon_c.strip().upper(),
+                                 "Tên linh kiện": ten_lk, "Đơn giá": don_gia_c, "Tổng tiền": tong_tien_c}
+                    df_C = pd.concat([df_C, pd.DataFrame([new_row_c])], ignore_index=True)
+                    save_data(df_C, "wanchi_c")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Vật Tư")
     edited_C = st.data_editor(df_C, num_rows="dynamic", use_container_width=True, key="edit_C")
     if st.button("💾 Cập nhật dữ liệu C (Lên Neon)"):
-        save_data(edited_C, "wanchi_c")
-        st.success("Đã đồng bộ lên cơ sở dữ liệu!")
+        with st.spinner("⏳ Đang đồng bộ cập nhật lên Cloud..."):
+            save_data(edited_C, "wanchi_c")
+        st.success("✅ Đã đồng bộ lên cơ sở dữ liệu!")
         st.rerun()
 
     st.markdown("---")
@@ -357,8 +358,9 @@ with tab_C:
     filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_c")
     
     if st.button("Tạo file PDF (Module C)"):
-        df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
-        pdf_c = export_pdf(df_export_c, f"BÁO CÁO VẬT TƯ KHUÔN {filter_pdf_c}")
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
+            pdf_c = export_pdf(df_export_c, f"BÁO CÁO VẬT TƯ KHUÔN {filter_pdf_c}")
         col_pdf6.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
 
 # ------------------------------------------
@@ -372,39 +374,41 @@ with tab_D:
         selected_mold = st.selectbox("Mã Khuôn Cần Tổng Kết:", list_molds_master, key="mold_total")
         
         if st.button("🧮 Tính Toán Bảng Tổng"):
-            if selected_mold:
-                sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
-                sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
-                sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
-                
-                total = sum_A + sum_B + sum_C
-                
-                new_row_D = {
-                    "Ngày": datetime.today().strftime('%d/%m/%Y'),
-                    "Mã khuôn": selected_mold,
-                    "Tổng Nguyên Vật Liệu (A)": sum_A,
-                    "Tổng Gia Công (B)": sum_B,
-                    "Tổng Vật Tư (C)": sum_C,
-                    "TỔNG CỘNG": total
-                }
-                
-                if selected_mold in df_D["Mã khuôn"].values:
-                    idx = df_D.index[df_D['Mã khuôn'] == selected_mold].tolist()[0]
-                    for k, v in new_row_D.items():
-                        df_D.at[idx, k] = v
-                else:
-                    df_D = pd.concat([df_D, pd.DataFrame([new_row_D])], ignore_index=True)
-                
-                save_data(df_D, "wanchi_d")
-                st.success("Đã ghi vào Bảng Tổng và đồng bộ lên DB!")
-                st.rerun()
+            with st.spinner("⏳ Đang xử lý tính toán..."):
+                if selected_mold:
+                    sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
+                    sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
+                    sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
+                    
+                    total = sum_A + sum_B + sum_C
+                    
+                    new_row_D = {
+                        "Ngày": datetime.today().strftime('%d/%m/%Y'),
+                        "Mã khuôn": selected_mold,
+                        "Tổng Nguyên Vật Liệu (A)": sum_A,
+                        "Tổng Gia Công (B)": sum_B,
+                        "Tổng Vật Tư (C)": sum_C,
+                        "TỔNG CỘNG": total
+                    }
+                    
+                    if selected_mold in df_D["Mã khuôn"].values:
+                        idx = df_D.index[df_D['Mã khuôn'] == selected_mold].tolist()[0]
+                        for k, v in new_row_D.items():
+                            df_D.at[idx, k] = v
+                    else:
+                        df_D = pd.concat([df_D, pd.DataFrame([new_row_D])], ignore_index=True)
+                    
+                    save_data(df_D, "wanchi_d")
+            st.success("✅ Đã ghi vào Bảng Tổng và đồng bộ lên DB!")
+            st.rerun()
 
     st.markdown("---")
     st.subheader("Bảng Tổng Hợp Chi Phí")
     edited_D = st.data_editor(df_D, num_rows="dynamic", use_container_width=True, key="edit_D")
     if st.button("💾 Cập nhật bảng Tổng (Lên Neon)"):
-        save_data(edited_D, "wanchi_d")
-        st.success("Đã lưu các thay đổi!")
+        with st.spinner("⏳ Đang lưu dữ liệu Tổng Hợp..."):
+            save_data(edited_D, "wanchi_d")
+        st.success("✅ Đã lưu các thay đổi!")
         st.rerun()
         
     st.markdown("---")
@@ -413,6 +417,7 @@ with tab_D:
     filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
     
     if st.button("Tạo file PDF (Module D)"):
-        df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
-        pdf_d = export_pdf(df_export_d, f"BẢNG TỔNG HỢP CHI PHÍ KHUÔN {filter_pdf_d}")
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
+            pdf_d = export_pdf(df_export_d, f"BẢNG TỔNG HỢP CHI PHÍ KHUÔN {filter_pdf_d}")
         col_pdf2_d.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
