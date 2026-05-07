@@ -7,14 +7,13 @@ if not st.session_state.get("logged_in", False):
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
-from sqlalchemy import text # Bổ sung text để chạy SQL thuần tối ưu tốc độ
+from sqlalchemy import text
 import os
 
 # ==========================================
 # CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
 # ==========================================
 
-# Khởi tạo kết nối đến CSDL Neon
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
@@ -26,8 +25,13 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP (CÂN CỘT + THÊM LOGO) <---
+# ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP <---
 def export_pdf(df, title):
+    # Tạo bản sao dữ liệu để xử lý riêng cho PDF, loại bỏ cột giá nội bộ nếu có
+    df_export = df.copy()
+    if "Cụm khuôn hoàn chỉnh" in df_export.columns:
+        df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
+    
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
@@ -69,16 +73,16 @@ def export_pdf(df, title):
     pdf.cell(0, 8, txt=f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
     pdf.ln(5)
 
-    if not df.empty:
+    if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         
         col_widths = []
-        for col in df.columns:
+        for col in df_export.columns:
             max_w = pdf.get_string_width(str(col)) + 4 
-            for item in df[col]:
+            for item in df_export[col]:
                 val_str = str(item)
                 if pd.notnull(item) and str(item).strip() != "":
-                    if col in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]:
+                    if col in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]:
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
                         except: pass
@@ -94,7 +98,7 @@ def export_pdf(df, title):
 
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
         pdf.set_fill_color(220, 220, 220)
-        for i, col in enumerate(df.columns):
+        for i, col in enumerate(df_export.columns):
             header_str = str(col)
             while pdf.get_string_width(header_str) > col_widths[i] - 1 and len(header_str) > 0:
                 header_str = header_str[:-1]
@@ -104,12 +108,12 @@ def export_pdf(df, title):
         pdf.set_font(font_name, '', 8)
         sum_tong_tien = 0 
         
-        for _, row in df.iterrows():
+        for _, row in df_export.iterrows():
             for i, (col_name, item) in enumerate(row.items()):
                 val_str = str(item) if pd.notnull(item) else ""
                 align_col = 'L'
                 
-                if col_name in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and str(item).strip() != "":
+                if col_name in ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"] and str(item).strip() != "":
                     try:
                         val = float(item)
                         val_str = f"{val:,.0f}".replace(",", ".")
@@ -124,15 +128,15 @@ def export_pdf(df, title):
                 pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
             pdf.ln()
             
-        if "Tổng tiền" in df.columns or "TỔNG CỘNG" in df.columns:
+        if "Tổng tiền" in df_export.columns or "TỔNG CỘNG" in df_export.columns:
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
             
-            for i, col in enumerate(df.columns):
+            for i, col in enumerate(df_export.columns):
                 if col in ["Tổng tiền", "TỔNG CỘNG"]:
                     tong_str = f"{sum_tong_tien:,.0f}".replace(",", ".")
                     pdf.cell(col_widths[i], 8, txt=tong_str, border=1, fill=True, align='R')
-                elif i == len(df.columns) - 2: 
+                elif i == len(df_export.columns) - 2: 
                     pdf.cell(col_widths[i], 8, txt="TỔNG CỘNG:", border=1, fill=True, align='R')
                 else:
                     pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
@@ -157,22 +161,25 @@ def load_data(table_name, columns):
             return pd.DataFrame(columns=columns)
         return df
     except Exception:
-        # Nếu bảng chưa tồn tại, Neon sẽ trả lỗi, ta bắt lỗi và trả về bảng trống nhanh chóng
         return pd.DataFrame(columns=columns)
 
-# --- TỐI ƯU HÓA HÀM LƯU DỮ LIỆU (TỐC ĐỘ CAO) ---
+# --- TỐI ƯU HÓA HÀM THÊM MỚI (TỐC ĐỘ CHỚP NHOÁNG) ---
+def append_data(new_row_dict, table_name):
+    try:
+        df_new = pd.DataFrame([new_row_dict])
+        df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi thêm dữ liệu mới ({table_name}): {str(e)}")
+
+# --- TỐI ƯU HÓA HÀM CẬP NHẬT DỮ LIỆU ---
 def save_data(df, table_name):
     try:
-        # Thay vì Pandas drop bảng cũ rồi tạo lại (Rất chậm qua mạng cloud)
-        # Bước 1: Thử làm rỗng dữ liệu cũ bằng TRUNCATE (Siêu nhanh, giữ nguyên cấu trúc bảng)
         try:
             with conn.session as session:
                 session.execute(text(f"TRUNCATE TABLE {table_name}"))
                 session.commit()
-            # Bước 2: Insert toàn bộ dữ liệu mới vào bằng phương thức gộp (multi)
             df.to_sql(table_name, con=conn.engine, if_exists='append', index=False, method='multi')
         except Exception:
-            # Nếu xảy lỗi (ví dụ: Bảng chưa từng được tạo lần nào), dùng replace để khởi tạo bảng
             df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
@@ -183,11 +190,13 @@ def save_data(df, table_name):
 cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách", "Số lượng", "Đơn giá", "Tổng tiền"]
 df_A = load_data("wanchi_a", cols_A)
 
-cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền"]
+cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
 
 if "Đơn giá" in df_B.columns:
-    df_B.rename(columns={"Đơn giá": "Ráp khuôn hoàn thiện"}, inplace=True)
+    df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+if "Ráp khuôn hoàn thiện" in df_B.columns:
+    df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
 if "Dọn phôi" not in df_B.columns:
     df_B["Dọn phôi"] = 0
 df_B = df_B[[c for c in cols_B if c in df_B.columns]]
@@ -238,11 +247,10 @@ with tab_A:
             tong_tien_a = c8.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000)
             
             if st.form_submit_button("Lưu Dữ Liệu NVL"):
-                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                with st.spinner("⏳ Đang chèn dữ liệu mới..."):
                     new_row = {"Ngày": ngay_a.strftime('%d/%m/%Y'), "Nhà cung cấp NVL": ncc_a, "Mã khuôn": ma_khuon_a.strip().upper(), 
                                "Tên NVL": ten_nvl, "Quy cách": quy_cach, "Số lượng": sl_a, "Đơn giá": don_gia_a, "Tổng tiền": tong_tien_a}
-                    df_A = pd.concat([df_A, pd.DataFrame([new_row])], ignore_index=True)
-                    save_data(df_A, "wanchi_a")
+                    append_data(new_row, "wanchi_a")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu (Cho phép chỉnh sửa/xóa trực tiếp)")
@@ -286,18 +294,17 @@ with tab_B:
             danh_bong = c8.number_input("Đánh bóng", min_value=0, step=1000)
             nham = c9.number_input("Tạo Nhám hoa văn", min_value=0, step=1000)
             don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1000)
-            rap_khuon = c11.number_input("Ráp khuôn hoàn thiện", min_value=0, step=1000)
+            rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1000)
             
             tong_tien_b = c4.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1000, key="tong_tien_b")
             
             if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
-                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                with st.spinner("⏳ Đang chèn dữ liệu mới..."):
                     new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
                                  "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
                                  "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
-                                 "Ráp khuôn hoàn thiện": rap_khuon, "Tổng tiền": tong_tien_b}
-                    df_B = pd.concat([df_B, pd.DataFrame([new_row_b])], ignore_index=True)
-                    save_data(df_B, "wanchi_b")
+                                 "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
+                    append_data(new_row_b, "wanchi_b")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Gia Công")
@@ -337,11 +344,10 @@ with tab_C:
             tong_tien_c = c6.number_input("Tổng tiền", min_value=0, step=1000, key="tt_c")
             
             if st.form_submit_button("Lưu Dữ Liệu Vật Tư"):
-                with st.spinner("⏳ Đang lưu dữ liệu mới..."):
+                with st.spinner("⏳ Đang chèn dữ liệu mới..."):
                     new_row_c = {"Ngày": ngay_c.strftime('%d/%m/%Y'), "Nhà cung cấp vật tư": ncc_c, "Mã khuôn": ma_khuon_c.strip().upper(),
                                  "Tên linh kiện": ten_lk, "Đơn giá": don_gia_c, "Tổng tiền": tong_tien_c}
-                    df_C = pd.concat([df_C, pd.DataFrame([new_row_c])], ignore_index=True)
-                    save_data(df_C, "wanchi_c")
+                    append_data(new_row_c, "wanchi_c")
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Vật Tư")
@@ -395,11 +401,10 @@ with tab_D:
                         idx = df_D.index[df_D['Mã khuôn'] == selected_mold].tolist()[0]
                         for k, v in new_row_D.items():
                             df_D.at[idx, k] = v
+                        save_data(df_D, "wanchi_d")
                     else:
-                        df_D = pd.concat([df_D, pd.DataFrame([new_row_D])], ignore_index=True)
-                    
-                    save_data(df_D, "wanchi_d")
-            st.success("✅ Đã ghi vào Bảng Tổng và đồng bộ lên DB!")
+                        append_data(new_row_D, "wanchi_d")
+            st.success("✅ Đã tính toán xong và đồng bộ lên DB!")
             st.rerun()
 
     st.markdown("---")
