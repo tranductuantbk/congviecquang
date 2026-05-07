@@ -27,7 +27,6 @@ def remove_accents(input_str):
 
 # ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP <---
 def export_pdf(df, title):
-    # Tạo bản sao dữ liệu để xử lý riêng cho PDF, loại bỏ cột giá nội bộ bảo mật
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
         df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
@@ -75,8 +74,6 @@ def export_pdf(df, title):
 
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
-        
-        # Danh sách các cột cần format dạng số tiền và căn phải
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn"]
         
         col_widths = []
@@ -161,7 +158,7 @@ def export_pdf(df, title):
 # KIẾN TRÚC BỘ NHỚ ĐỆM (CACHE) CỰC NHANH
 # ==========================================
 
-@st.cache_data(show_spinner=False, ttl=86400) # Lưu trong RAM 1 ngày
+@st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
     try:
         return conn.query(f"SELECT * FROM {table_name}", ttl=0)
@@ -205,6 +202,20 @@ def save_data(df, table_name):
         force_reload_cache()
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
+
+# TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU CỦA 1 KHUÔN
+def delete_mold_from_db(mold_code):
+    try:
+        with conn.session as session:
+            # Chạy 4 lệnh SQL siêu tốc để quét sạch mã khuôn ở 4 bảng
+            session.execute(text('DELETE FROM wanchi_a WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.commit()
+        force_reload_cache()
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi xóa khuôn trên database: {str(e)}")
 
 
 # ==========================================
@@ -457,16 +468,14 @@ with tab_D:
 
 
 # ------------------------------------------
-# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP
+# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP & QUẢN TRỊ
 # ------------------------------------------
 with tab_E:
     st.header("E. Danh Sách Các Khuôn Đã Làm")
     st.markdown("Bảng tóm tắt tự động thu thập ngày bắt đầu làm khuôn (ngày sớm nhất nhập vật liệu/gia công) và tổng giá trị cho từng mã khuôn.")
     
-    # Tạo dữ liệu động cho Tab E
     danh_sach_khuon_data = []
     for mk in list_molds_master:
-        # 1. Tìm ngày làm khuôn (Ngày sớm nhất được ghi nhận trong các module)
         dates = []
         for df_temp in [df_A, df_B, df_C]:
             if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
@@ -484,14 +493,12 @@ with tab_E:
             if parsed_dates:
                 ngay_lam = min(parsed_dates).strftime('%d/%m/%Y')
         
-        # 2. Lấy Tổng Giá Trị Khuôn
         tong_gia = 0
         if not df_D.empty and 'Mã khuôn' in df_D.columns:
             row_d = df_D[df_D['Mã khuôn'] == mk]
             if not row_d.empty:
                 tong_gia = row_d['TỔNG CỘNG'].values[0]
         
-        # Tính dự phòng nếu chưa nhấn nút tính ở Tab D
         if tong_gia == 0:
             sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
             sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
@@ -507,7 +514,6 @@ with tab_E:
     df_E = pd.DataFrame(danh_sach_khuon_data)
     
     if not df_E.empty:
-        # Căn chỉnh để cột tiền tệ hiển thị rõ ràng hơn
         st.dataframe(
             df_E,
             column_config={
@@ -523,10 +529,48 @@ with tab_E:
         
         st.markdown("---")
         st.subheader("📥 Xuất Báo Cáo PDF Danh Sách Khuôn")
-        
         if st.button("Tạo file PDF (Module E)"):
             with st.spinner("Đang trích xuất file PDF..."):
                 pdf_e = export_pdf(df_E, "DANH SÁCH TỔNG HỢP CÁC KHUÔN ĐÃ LÀM")
             st.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_e, "WANCHI_DanhSachKhuon.pdf", "application/pdf")
+            
+        st.markdown("---")
+        st.subheader("🗑️ Khu Vực Quản Trị: Xóa Khuôn")
+        st.warning("⚠️ Công cụ này dùng để xóa toàn bộ dữ liệu của một dự án khuôn lỗi hoặc nhập sai. Thao tác này sẽ dọn sạch dữ liệu ở cả 4 bảng (Vật liệu, Gia công, Vật tư, Tổng hợp) và không thể khôi phục.")
+        
+        col_del1, col_del2 = st.columns([1, 1])
+        selected_mold_to_delete = col_del1.selectbox("Chọn mã khuôn cần xóa hoàn toàn:", list_molds_master, key="del_mold_select")
+        
+        # Thiết lập cơ chế State để tạo bước xác nhận (hỏi lại)
+        if "confirm_delete" not in st.session_state:
+            st.session_state.confirm_delete = False
+            st.session_state.mold_to_delete = None
+
+        if col_del1.button("🗑️ Xóa khuôn này"):
+            if selected_mold_to_delete:
+                st.session_state.confirm_delete = True
+                st.session_state.mold_to_delete = selected_mold_to_delete
+                st.rerun()
+
+        # Hiện bảng hỏi lại nếu nút Xóa đã được nhấn
+        if st.session_state.get("confirm_delete") and st.session_state.get("mold_to_delete"):
+            mold = st.session_state.mold_to_delete
+            with st.container(border=True):
+                st.error(f"🛑 BẠN ĐANG THAO TÁC XÓA KHUÔN: **{mold}**")
+                st.write(f"Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ lịch sử chi phí của **{mold}** không? Hãy xác nhận bên dưới.")
+                
+                c_yes, c_no = st.columns(2)
+                if c_yes.button("✅ Vâng, Xóa Toàn Bộ"):
+                    with st.spinner(f"Đang dọn dẹp dữ liệu của khuôn {mold}..."):
+                        delete_mold_from_db(mold)
+                        st.session_state.confirm_delete = False
+                        st.session_state.mold_to_delete = None
+                    st.success(f"🎉 Đã xóa thành công toàn bộ dữ liệu của khuôn {mold}!")
+                    st.rerun()
+                    
+                if c_no.button("❌ Hủy bỏ, Không xóa"):
+                    st.session_state.confirm_delete = False
+                    st.session_state.mold_to_delete = None
+                    st.rerun()
     else:
         st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
