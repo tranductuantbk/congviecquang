@@ -28,8 +28,8 @@ def remove_accents(input_str):
 # ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP <---
 def export_pdf(df, title):
     df_export = df.copy()
-    if "Ráp khuôn hoàn thiện" in df_export.columns:
-        df_export = df_export.drop(columns=["Ráp khuôn hoàn thiện"])
+    if "Cụm khuôn hoàn chỉnh" in df_export.columns:
+        df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
     
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -222,23 +222,30 @@ def delete_mold_from_db(mold_code):
 # ==========================================
 cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách", "Số lượng", "Đơn giá", "Tổng tiền"]
 df_A = load_data("wanchi_a", cols_A)
+df_A = df_A.loc[:, ~df_A.columns.duplicated()]
 
-cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện", "Tổng tiền"]
+cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
 
 if "Đơn giá" in df_B.columns:
-    df_B.rename(columns={"Đơn giá": "Ráp khuôn hoàn thiện"}, inplace=True)
-if "Cụm khuôn hoàn chỉnh" in df_B.columns:
-    df_B.rename(columns={"Cụm khuôn hoàn chỉnh": "Ráp khuôn hoàn thiện"}, inplace=True)
+    df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+if "Ráp khuôn hoàn thiện" in df_B.columns:
+    df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+
+df_B = df_B.loc[:, ~df_B.columns.duplicated()]
+
 if "Dọn phôi" not in df_B.columns:
     df_B["Dọn phôi"] = 0
+
 df_B = df_B[[c for c in cols_B if c in df_B.columns]]
 
 cols_C = ["Ngày", "Nhà cung cấp vật tư", "Mã khuôn", "Tên linh kiện", "Đơn giá", "Tổng tiền"]
 df_C = load_data("wanchi_c", cols_C)
+df_C = df_C.loc[:, ~df_C.columns.duplicated()]
 
 cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
 df_D = load_data("wanchi_d", cols_D)
+df_D = df_D.loc[:, ~df_D.columns.duplicated()]
 
 all_molds_set = set()
 if not df_A.empty: all_molds_set.update(df_A["Mã khuôn"].dropna().unique())
@@ -275,11 +282,14 @@ with tab_A:
             ma_khuon_a = c3.text_input("Mã khuôn (Nhập mã mới tại đây)")
             ten_nvl = c4.text_input("Tên NVL")
             
-            c5, c6, c7, c8 = st.columns(4)
+            c5, c6, c7 = st.columns(3)
             quy_cach = c5.text_input("Quy cách")
-            sl_a = c6.number_input("Số lượng", min_value=0, step=1) 
+            sl_a = c6.number_input("Số lượng", min_value=0.0, step=1.0) 
             don_gia_a = c7.number_input("Đơn giá", min_value=0, step=1)
-            tong_tien_a = c8.number_input("Tổng tiền (Tự nhập)", min_value=0, step=1)
+            
+            st.markdown("---")
+            _, c8 = st.columns([3, 1])
+            tong_tien_a = c8.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1)
             
             if st.form_submit_button("Lưu Dữ Liệu NVL"):
                 with st.spinner("⏳ Đang chèn dữ liệu mới..."):
@@ -330,18 +340,18 @@ with tab_B:
             danh_bong = c8.number_input("Đánh bóng", min_value=0, step=1)
             nham = c9.number_input("Tạo Nhám hoa văn", min_value=0, step=1)
             don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
-            rap_khuon = c11.number_input("Ráp khuôn hoàn thiện", min_value=0, step=1)
+            rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1)
             
             st.markdown("---")
-            c12, c13, c14, c15 = st.columns(4)
-            tong_tien_b = c15.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1, key="tong_tien_b")
+            _, c12 = st.columns([3, 1])
+            tong_tien_b = c12.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1, key="tong_tien_b")
             
             if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
                 with st.spinner("⏳ Đang xử lý đồng bộ cơ sở dữ liệu..."):
                     new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
                                  "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
                                  "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
-                                 "Ráp khuôn hoàn thiện": rap_khuon, "Tổng tiền": tong_tien_b}
+                                 "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
                     append_data(new_row_b, "wanchi_b", df_B)
                 st.rerun()
 
@@ -377,10 +387,13 @@ with tab_C:
             ncc_c = c2.text_input("Nhà cung cấp vật tư")
             ma_khuon_c = c3.selectbox("Chọn mã khuôn:", list_molds_master, key="mk_c") if list_molds_master else c3.text_input("Mã khuôn", key="mk_c_text")
             
-            c4, c5, c6 = st.columns(3)
+            c4, c5 = st.columns(2)
             ten_lk = c4.text_input("Tên linh kiện")
             don_gia_c = c5.number_input("Đơn giá", min_value=0, step=1, key="dg_c")
-            tong_tien_c = c6.number_input("Tổng tiền", min_value=0, step=1, key="tt_c")
+            
+            st.markdown("---")
+            _, c6 = st.columns([3, 1])
+            tong_tien_c = c6.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1, key="tt_c")
             
             if st.form_submit_button("Lưu Dữ Liệu Vật Tư"):
                 with st.spinner("⏳ Đang chèn dữ liệu mới..."):
@@ -542,6 +555,7 @@ with tab_E:
         col_del1, col_del2 = st.columns([1, 1])
         selected_mold_to_delete = col_del1.selectbox("Chọn mã khuôn cần xóa hoàn toàn:", list_molds_master, key="del_mold_select")
         
+        # Thiết lập cơ chế State để tạo bước xác nhận (hỏi lại)
         if "confirm_delete" not in st.session_state:
             st.session_state.confirm_delete = False
             st.session_state.mold_to_delete = None
@@ -552,6 +566,7 @@ with tab_E:
                 st.session_state.mold_to_delete = selected_mold_to_delete
                 st.rerun()
 
+        # Hiện bảng hỏi lại nếu nút Xóa đã được nhấn
         if st.session_state.get("confirm_delete") and st.session_state.get("mold_to_delete"):
             mold = st.session_state.mold_to_delete
             with st.container(border=True):
