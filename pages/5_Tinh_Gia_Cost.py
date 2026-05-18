@@ -12,7 +12,7 @@ if not st.session_state.get("logged_in", False):
     st.warning("🔒 Bạn chưa đăng nhập! Vui lòng quay lại Trang Chủ (Home) để gõ mật khẩu.")
     st.stop()
 
-st.set_page_config(page_title="Tính Giá Cost & Báo Giá", layout="wide")
+st.set_page_config(page_title="Phân Tích Giá Cost & Lợi Nhuận", layout="wide")
 
 # ==========================================
 # CẤU HÌNH & KẾT NỐI DB
@@ -28,9 +28,84 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# ---> HÀM XUẤT PDF BẢNG BÁO GIÁ <---
-def export_baogia_pdf(summary_row, df_detail):
-    pdf = FPDF(orientation='P', unit='mm', format='A4') # Khổ dọc cho báo giá
+# ==========================================
+# BỘ TỪ ĐIỂN TEMPLATE CÁC NGÀNH NGHỀ
+# ==========================================
+TEMPLATES = {
+    "1. F&B (Đồ ăn / Thức uống)": [
+        "Nguyên vật liệu chính (Cà phê, Trà, Thịt...)",
+        "Gia vị / Vật liệu phụ",
+        "Bao bì (Ly, Hộp, Túi nilon, Muỗng)",
+        "Nhân công trực tiếp (Pha chế, Bếp)",
+        "Chi phí vận hành (Điện, Nước, Gas)",
+        "Phân bổ mặt bằng / Quản lý",
+        "Hao hụt / Bỏ mứa / Hư hỏng"
+    ],
+    "2. Thi công Nội thất / Mộc": [
+        "Gỗ / Ván công nghiệp / Phôi chính",
+        "Phụ kiện (Bản lề, Ray, Tay nắm...)",
+        "Vật tư phụ (Keo, Đinh, Nhám, Sơn...)",
+        "Nhân công sản xuất (Thợ xưởng)",
+        "Nhân công lắp đặt (Tại công trình)",
+        "Khấu hao máy móc / Giờ chạy máy",
+        "Chi phí Vận chuyển / Bốc vác",
+        "Rủi ro bảo hành / Hao hụt ván"
+    ],
+    "3. Xây dựng / Công trình": [
+        "Vật tư thô (Cát, Đá, Xi măng, Thép...)",
+        "Vật tư hoàn thiện (Gạch, Sơn, Điện nước...)",
+        "Nhân công (Khoán / Thợ xây / Thợ phụ)",
+        "Ca máy / Thuê thiết bị (Múc, Trộn, Cẩu...)",
+        "Vận chuyển / Đổ xà bần",
+        "Quản lý dự án / Kỹ thuật hiện trường",
+        "Rủi ro trượt giá vật tư / Hao hụt"
+    ],
+    "4. Gia công Khuôn mẫu / Cơ khí": [
+        "Phôi thép / Nguyên liệu chính",
+        "Linh kiện chuẩn (Chốt, Lò xo, Ốc...)",
+        "Giờ chạy máy (Phay CNC, Cắt dây, Xung...)",
+        "Nhân công (Lắp ráp, Đánh bóng, Nguội)",
+        "Xử lý bề mặt (Nhiệt luyện, Xi mạ)",
+        "Chi phí vận chuyển / Giao nhận",
+        "Hao hụt phôi / Mòn dao cụ"
+    ],
+    "5. Đa dụng (Cơ bản)": [
+        "Nguyên vật liệu",
+        "Chi phí Nhân công",
+        "Máy móc & Thiết bị",
+        "Thuê ngoài / Dịch vụ",
+        "Chi phí chung & Quản lý",
+        "Hao hụt / Rủi ro"
+    ]
+}
+
+# Khởi tạo trạng thái ban đầu
+if "cost_template" not in st.session_state:
+    st.session_state.cost_template = "5. Đa dụng (Cơ bản)"
+    
+if "cost_items" not in st.session_state:
+    st.session_state.cost_items = pd.DataFrame(columns=[
+        "Nhóm chi phí", "Tên chi tiết", "Đơn vị", "Định mức", "Đơn giá", "Thành tiền"
+    ])
+
+def tao_bang_mau_theo_nganh(ten_nganh):
+    ds_nhom = TEMPLATES[ten_nganh]
+    du_lieu_moi = []
+    for nhom in ds_nhom:
+        du_lieu_moi.append({
+            "Nhóm chi phí": nhom,
+            "Tên chi tiết": "",
+            "Đơn vị": "",
+            "Định mức": 0.0,
+            "Đơn giá": 0,
+            "Thành tiền": 0
+        })
+    st.session_state.cost_items = pd.DataFrame(du_lieu_moi)
+    st.session_state.cost_template = ten_nganh
+
+# ---> HÀM XUẤT PDF PHIẾU PHÂN TÍCH NỘI BỘ <---
+def export_internal_analysis_pdf(summary_row, df_detail):
+    pdf = FPDF(orientation='P', unit='mm', format='A4') 
     pdf.add_page()
     
     try:
@@ -41,44 +116,34 @@ def export_baogia_pdf(summary_row, df_detail):
         font_name = 'Arial'
         st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
-    # --- Header ---
-    logo_path = "logo.png" 
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=10, y=8, w=35)
-        start_x = 50 
-    else:
-        start_x = 10
-
-    pdf.set_xy(start_x, 10)
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 14)
+    # --- Header Nội Bộ ---
+    pdf.set_xy(10, 10)
+    pdf.set_font(font_name, 'B', 14)
     pdf.cell(0, 6, txt="TUẤN QUANG", ln=True, align='L')
-    pdf.set_x(start_x)
     pdf.set_font(font_name, '', 10)
-    pdf.cell(0, 5, txt="775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM", ln=True, align='L')
-    pdf.set_x(start_x)
     pdf.cell(0, 5, txt="Liên hệ: 0937572577", ln=True, align='L')
     pdf.ln(10)
 
-    # --- Tiêu đề & Thông tin khách ---
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
-    pdf.cell(0, 10, txt="BẢNG TÍNH GIÁ COST & ĐỀ XUẤT BÁO GIÁ", ln=True, align='C')
+    # --- Tiêu đề ---
+    pdf.set_font(font_name, 'B', 16)
+    pdf.cell(0, 10, txt="PHIẾU PHÂN TÍCH COST & TÍNH KHẢ THI DỰ ÁN", ln=True, align='C')
     pdf.ln(5)
     
     pdf.set_font(font_name, '', 11)
-    pdf.cell(0, 6, txt=f"Ngày báo giá: {summary_row['Ngày']}", ln=True)
-    pdf.cell(0, 6, txt=f"Dự án / Sản phẩm: {summary_row['Sản phẩm / Dự án']}", ln=True)
-    pdf.cell(0, 6, txt=f"Khách hàng: {summary_row['Khách hàng']}", ln=True)
-    pdf.cell(0, 6, txt=f"Số lượng sản xuất (Lô): {summary_row['SL Lô']} Đơn vị", ln=True)
+    pdf.cell(0, 6, txt=f"Ngày phân tích: {summary_row['Ngày']}", ln=True)
+    pdf.cell(0, 6, txt=f"Tên Dự án / Sản phẩm: {summary_row['Tên dự án']}", ln=True)
+    pdf.cell(0, 6, txt=f"Lĩnh vực áp dụng: {summary_row['Ngành nghề']}", ln=True)
+    pdf.cell(0, 6, txt=f"Quy mô sản xuất: {summary_row['Quy mô']} Đơn vị", ln=True)
     pdf.ln(5)
 
-    # --- Bảng Chi Tiết BOM ---
+    # --- Bảng Chi Tiết Cost ---
     if not df_detail.empty:
-        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 10)
-        pdf.cell(0, 8, txt="I. CHI TIẾT ĐỊNH MỨC (GIÁ VỐN):", ln=True)
+        pdf.set_font(font_name, 'B', 10)
+        pdf.cell(0, 8, txt="I. BẢNG BÓC TÁCH CHI PHÍ (COST BREAKDOWN):", ln=True)
         
-        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
-        col_widths = [35, 60, 15, 20, 30, 30] # Tổng 190mm vừa vặn A4 dọc
-        headers = ["Nhóm chi phí", "Tên hạng mục", "ĐVT", "Số lượng", "Đơn giá", "Thành tiền"]
+        pdf.set_font(font_name, 'B', 8)
+        col_widths = [45, 55, 12, 18, 30, 30] 
+        headers = ["Nhóm chi phí", "Tên chi tiết", "ĐVT", "Định mức", "Đơn giá", "Thành tiền"]
         
         pdf.set_fill_color(220, 220, 220)
         for i, header in enumerate(headers):
@@ -89,15 +154,14 @@ def export_baogia_pdf(summary_row, df_detail):
         for _, row in df_detail.iterrows():
             row_vals = [
                 str(row.get("Nhóm chi phí", "")),
-                str(row.get("Tên hạng mục", "")),
+                str(row.get("Tên chi tiết", "")),
                 str(row.get("Đơn vị", "")),
-                f"{float(row.get('Số lượng / Thời gian', 0)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if row.get("Số lượng / Thời gian") else "",
-                f"{float(row.get('Đơn giá cost', 0)):,.0f}".replace(",", ".") if row.get("Đơn giá cost") else "",
-                f"{float(row.get('Tổng cộng', 0)):,.0f}".replace(",", ".") if row.get("Tổng cộng") else ""
+                f"{float(row.get('Định mức', 0)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if row.get("Định mức") else "",
+                f"{float(row.get('Đơn giá', 0)):,.0f}".replace(",", ".") if row.get("Đơn giá") else "",
+                f"{float(row.get('Thành tiền', 0)):,.0f}".replace(",", ".") if row.get("Thành tiền") else ""
             ]
             aligns = ['L', 'L', 'C', 'R', 'R', 'R']
             
-            # Xử lý xuống dòng cho cột Tên hạng mục
             line_height = 5
             est_w = pdf.get_string_width(row_vals[1])
             lines = int(est_w / (col_widths[1] - 2)) + 1
@@ -113,33 +177,30 @@ def export_baogia_pdf(summary_row, df_detail):
                 x_start += col_widths[i]
             pdf.set_y(y_start + row_height)
 
-    # --- Phần Tổng Kết Chốt Giá ---
+    # --- Phần Tổng Kết Go/No-Go ---
     pdf.ln(10)
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 10)
-    pdf.cell(0, 8, txt="II. TỔNG KẾT BÁO GIÁ:", ln=True)
+    pdf.set_font(font_name, 'B', 10)
+    pdf.cell(0, 8, txt="II. KẾT QUẢ ĐÁNH GIÁ TÀI CHÍNH:", ln=True)
     
     pdf.set_font(font_name, '', 10)
-    pdf.cell(90, 8, txt="Tổng chi phí gốc (Cost):", border=1)
-    pdf.cell(100, 8, txt=f"{float(summary_row['Tổng giá vốn']):,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
+    pdf.cell(90, 8, txt="1. Tổng Giá Vốn Thực Tế (Cost):", border=1)
+    pdf.cell(100, 8, txt=f"{float(summary_row['Tổng Cost']):,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
     
-    pdf.cell(90, 8, txt=f"Tỷ lệ hao hụt dự phòng ({summary_row['Hao hụt (%)']}%):", border=1)
-    hao_hut_val = float(summary_row['Tổng giá vốn']) * (float(summary_row['Hao hụt (%)']) / 100)
-    pdf.cell(100, 8, txt=f"{hao_hut_val:,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
+    pdf.cell(90, 8, txt="2. Giá Bán Dự Kiến / Cạnh Tranh:", border=1)
+    pdf.cell(100, 8, txt=f"{float(summary_row['Giá bán']):,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
     
-    pdf.cell(90, 8, txt=f"Biên lợi nhuận kỳ vọng ({summary_row['Lợi nhuận (%)']}%):", border=1)
-    loi_nhuan_val = (float(summary_row['Tổng giá vốn']) + hao_hut_val) * (float(summary_row['Lợi nhuận (%)']) / 100)
-    pdf.cell(100, 8, txt=f"{loi_nhuan_val:,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
+    pdf.cell(90, 8, txt="3. Lợi Nhuận Gộp Ước Tính:", border=1)
+    pdf.cell(100, 8, txt=f"{float(summary_row['Lợi nhuận']):,.0f} VNĐ".replace(",", "."), border=1, align='R', ln=True)
     
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+    pdf.set_font(font_name, 'B', 11)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(90, 10, txt="TỔNG GIÁ BÁN (CHO CẢ LÔ):", border=1, fill=True)
-    pdf.cell(100, 10, txt=f"{float(summary_row['Tổng giá bán']):,.0f} VNĐ".replace(",", "."), border=1, fill=True, align='R', ln=True)
+    pdf.cell(90, 10, txt="4. TỶ SUẤT LỢI NHUẬN (MARGIN):", border=1, fill=True)
+    pdf.cell(100, 10, txt=f"{float(summary_row['Margin (%)']):,.2f} %", border=1, fill=True, align='R', ln=True)
     
-    pdf.set_fill_color(210, 250, 210)
-    pdf.cell(90, 10, txt="ĐƠN GIÁ ĐỀ XUẤT CHO 1 SẢN PHẨM:", border=1, fill=True)
-    pdf.cell(100, 10, txt=f"{float(summary_row['Giá bán 1 SP']):,.0f} VNĐ".replace(",", "."), border=1, fill=True, align='R', ln=True)
+    pdf.cell(90, 10, txt="5. QUYẾT ĐỊNH (KẾT LUẬN):", border=1, fill=True)
+    pdf.cell(100, 10, txt=str(summary_row['Đánh giá']).upper(), border=1, fill=True, align='C', ln=True)
 
-    temp_filename = f"temp_baogia_{datetime.now().strftime('%H%M%S')}.pdf"
+    temp_filename = f"temp_analysis_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     with open(temp_filename, "rb") as f:
         pdf_bytes = f.read()
@@ -180,7 +241,7 @@ def append_data(new_row_dict, table_name, df_current):
             df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
             force_reload_cache()
         except Exception as e2:
-            st.error(f"⚠️ Lỗi xử lý: {str(e2)}")
+            st.error(f"⚠️ Lỗi: {str(e2)}")
 
 def save_data(df, table_name):
     try:
@@ -193,180 +254,194 @@ def save_data(df, table_name):
         df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
         force_reload_cache()
 
-# Tải dữ liệu Bảng Lịch sử Báo giá
-cols_BaoGia = ["Ngày", "Sản phẩm / Dự án", "Khách hàng", "SL Lô", "Tổng giá vốn", "Hao hụt (%)", "Lợi nhuận (%)", "Giá bán 1 SP", "Tổng giá bán", "Chi tiết BOM"]
-df_BaoGia = load_data("wanchi_baogia", cols_BaoGia)
-df_BaoGia = df_BaoGia.loc[:, ~df_BaoGia.columns.duplicated()]
-
-if "costing_items" not in st.session_state:
-    st.session_state.costing_items = pd.DataFrame(columns=[
-        "Nhóm chi phí", "Tên hạng mục", "Đơn vị", "Số lượng / Thời gian", "Đơn giá cost", "Tổng cộng"
-    ])
+# Tải dữ liệu Bảng Lịch sử Phân tích
+cols_Costing = ["Ngày", "Tên dự án", "Ngành nghề", "Quy mô", "Tổng Cost", "Giá bán", "Lợi nhuận", "Margin (%)", "Đánh giá", "Chi tiết BOM"]
+df_Costing = load_data("wanchi_costing_v2", cols_Costing)
+df_Costing = df_Costing.loc[:, ~df_Costing.columns.duplicated()]
 
 # ==========================================
 # GIAO DIỆN CHÍNH
 # ==========================================
-st.title("🧮 Hệ Thống Tính Giá Cost & Lịch Sử Báo Giá")
+st.title("⚖️ Bóc Tách Chi Phí & Đánh Giá Dự Án Đa Ngành")
+st.markdown("Dùng trong nội bộ để tính chính xác Giá vốn (Cost), xác định lợi nhuận và ra quyết định Có nên làm hay không.")
 st.markdown("---")
 
-tab_TinhGia, tab_LichSu = st.tabs(["🧮 TÍNH GIÁ COST MỚI", "🗂️ LỊCH SỬ ĐÃ BÁO GIÁ"])
+tab_TinhCost, tab_LichSu = st.tabs(["🧩 BÓC TÁCH CHI PHÍ MỚI", "🗂️ LỊCH SỬ ĐÁNH GIÁ (GO/NO-GO)"])
 
 # ------------------------------------------
-# TAB 1: TÍNH GIÁ COST
+# TAB 1: TÍNH GIÁ COST CHI TIẾT
 # ------------------------------------------
-with tab_TinhGia:
-    col_info1, col_info2, col_info3 = st.columns(3)
-    ten_sp = col_info1.text_input("Tên Sản phẩm / Tên dự án cần tính giá:")
-    khach_hang = col_info2.text_input("Tên Khách hàng (Nếu có):")
-    so_luong_lo = col_info3.number_input("Số lượng sản xuất (Cái/Bộ):", min_value=1, value=1, step=1, 
-                                         help="Rất quan trọng để chia đều chi phí ra đơn giá 1 sản phẩm.")
+with tab_TinhCost:
+    with st.container(border=True):
+        st.subheader("Bước 1: Chọn Ngành Nghề & Thiết Lập Dự Án")
+        c_nganh, c_btn = st.columns([3, 1])
+        nganh_chon = c_nganh.selectbox("Lĩnh vực kinh doanh / Loại dự án:", list(TEMPLATES.keys()), index=list(TEMPLATES.keys()).index(st.session_state.cost_template))
+        
+        st.caption("💡 Mẹo: Bấm 'Tạo Bảng Tính Mẫu' để phần mềm tự động lên khung các danh mục chi phí cần có cho ngành này.")
+        if c_btn.button("✨ TẠO BẢNG TÍNH MẪU", use_container_width=True):
+            tao_bang_mau_theo_nganh(nganh_chon)
+            st.rerun()
 
-    st.markdown("---")
-    st.subheader("1. Bảng Khai Báo Chi Phí (Giá Vốn)")
-    st.info("💡 Hướng dẫn: Cuộn xuống cuối bảng, bấm dấu '+' để thêm dòng mới. Bạn có thể tự do gõ tên Vật liệu hoặc Tên máy móc.")
+        st.markdown("---")
+        col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
+        ten_du_an = col_info1.text_input("Tên Công việc / Sản phẩm cần phân tích:", placeholder="VD: Ly Cafe Sữa, Thiết kế tủ áo, Xây nhà cấp 4...")
+        so_luong_lo = col_info2.number_input("Quy mô / Số lượng:", min_value=1, value=1, step=1, help="Nhập 1 nếu tính cho 1 sản phẩm, nhập 1000 nếu tính cho cả lô.")
+        gia_ban_du_kien = col_info3.number_input("Giá thu khách dự kiến (VNĐ):", min_value=0, step=1000, help="Giá bạn định thu của khách hoặc giá thị trường chung.")
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("Bước 2: Điền Bảng Định Mức Trực Tiếp (BOM)")
+    st.info("Hãy điền vào Tên chi tiết, Định mức (Số lượng/Thời gian) và Đơn giá. Cuộn xuống dưới cùng để ấn nút '+' nếu cần thêm dòng.")
+
+    # Cập nhật danh sách Selectbox linh hoạt theo Ngành đã chọn
+    current_categories = TEMPLATES[st.session_state.cost_template]
+    
     edited_cost_df = st.data_editor(
-        st.session_state.costing_items,
+        st.session_state.cost_items,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
             "Nhóm chi phí": st.column_config.SelectboxColumn(
-                "Nhóm chi phí",
-                options=[
-                    "1. Nguyên vật liệu", 
-                    "2. Giờ chạy máy (Khấu hao)", 
-                    "3. Nhân công trực tiếp", 
-                    "4. Thuê gia công ngoài", 
-                    "5. Chi phí khác (Đóng gói, Vận chuyển)"
-                ],
+                "Nhóm Phân Loại",
+                options=current_categories,
                 required=True
             ),
-            "Tên hạng mục": st.column_config.TextColumn("Tên hạng mục (VD: Thép SKD11, Máy Phay, Thợ hàn...)", required=True),
-            "Đơn vị": st.column_config.TextColumn("ĐVT (kg, giờ, cái...)"),
-            "Số lượng / Thời gian": st.column_config.NumberColumn("Số lượng / Thời gian", min_value=0.0, format="%.2f"),
-            "Đơn giá cost": st.column_config.NumberColumn("Đơn giá (VNĐ)", min_value=0, step=1000, format="%d"),
-            "Tổng cộng": st.column_config.NumberColumn("Thành tiền (VNĐ)", disabled=True)
+            "Tên chi tiết": st.column_config.TextColumn("Tên chi tiết cụ thể", required=True),
+            "Đơn vị": st.column_config.TextColumn("ĐVT"),
+            "Định mức": st.column_config.NumberColumn("Số lượng tiêu hao", min_value=0.0, format="%.3f"),
+            "Đơn giá": st.column_config.NumberColumn("Đơn giá cost (VNĐ)", min_value=0, step=1000, format="%d"),
+            "Thành tiền": st.column_config.NumberColumn("Thành tiền (VNĐ)", disabled=True)
         },
-        key="costing_editor"
+        key="cost_bom_editor"
     )
 
-    tong_chi_phi_goc = 0
+    tong_cost = 0
     if not edited_cost_df.empty:
-        edited_cost_df["Số lượng / Thời gian"] = pd.to_numeric(edited_cost_df["Số lượng / Thời gian"], errors="coerce").fillna(0)
-        edited_cost_df["Đơn giá cost"] = pd.to_numeric(edited_cost_df["Đơn giá cost"], errors="coerce").fillna(0)
-        edited_cost_df["Tổng cộng"] = edited_cost_df["Số lượng / Thời gian"] * edited_cost_df["Đơn giá cost"]
-        tong_chi_phi_goc = edited_cost_df["Tổng cộng"].sum()
+        edited_cost_df["Định mức"] = pd.to_numeric(edited_cost_df["Định mức"], errors="coerce").fillna(0)
+        edited_cost_df["Đơn giá"] = pd.to_numeric(edited_cost_df["Đơn giá"], errors="coerce").fillna(0)
+        edited_cost_df["Thành tiền"] = edited_cost_df["Định mức"] * edited_cost_df["Đơn giá"]
+        tong_cost = edited_cost_df["Thành tiền"].sum()
 
     st.markdown("---")
-    st.subheader("2. Chốt Giá & Lợi Nhuận")
+    st.subheader("Bước 3: Phân Tích Khả Thi (Go / No-Go)")
 
-    col_sum1, col_sum2 = st.columns([1, 1.5])
+    col_res1, col_res2 = st.columns([1, 1])
+    loi_nhuan = gia_ban_du_kien - tong_cost
+    margin = (loi_nhuan / gia_ban_du_kien * 100) if gia_ban_du_kien > 0 else 0
 
-    with col_sum1:
+    with col_res1:
         with st.container(border=True):
-            st.markdown(f"### Tổng Chi Phí Gốc: **{tong_chi_phi_goc:,.0f} VNĐ**")
-            hao_hut = st.slider("Tỷ lệ hao hụt / Rủi ro (%)", 0, 30, 5)
-            loi_nhuan = st.slider("Biên lợi nhuận mong muốn (%)", 0, 100, 20)
+            st.markdown("### CHỈ SỐ TÀI CHÍNH")
+            st.write(f"**Tổng Giá Vốn (Cost):** {tong_cost:,.0f} VNĐ")
+            st.write(f"**Giá Bán Dự Kiến:** {gia_ban_du_kien:,.0f} VNĐ")
             
-            chi_phi_hao_hut = tong_chi_phi_goc * (hao_hut / 100)
-            gia_von_cuoi_cung = tong_chi_phi_goc + chi_phi_hao_hut
-            tien_loi = gia_von_cuoi_cung * (loi_nhuan / 100)
-            tong_gia_ban_lo = gia_von_cuoi_cung + tien_loi
-            gia_ban_1_cai = tong_gia_ban_lo / so_luong_lo if so_luong_lo > 0 else 0
+            if loi_nhuan > 0:
+                st.write(f"**Lợi Nhuận Gộp:** <span style='color:green;'>+{loi_nhuan:,.0f} VNĐ</span>", unsafe_allow_html=True)
+                st.write(f"**Biên Lợi Nhuận (Margin):** <span style='color:green;'>{margin:.2f}%</span>", unsafe_allow_html=True)
+            else:
+                st.write(f"**Lợi Nhuận Gộp:** <span style='color:red;'>{loi_nhuan:,.0f} VNĐ</span>", unsafe_allow_html=True)
+                st.write(f"**Biên Lợi Nhuận (Margin):** <span style='color:red;'>{margin:.2f}%</span>", unsafe_allow_html=True)
 
-    with col_sum2:
+    with col_res2:
         with st.container(border=True):
-            st.success("📊 KẾT QUẢ ĐỀ XUẤT BÁO GIÁ")
-            st.markdown(f"""
-            * Tổng giá vốn thực tế (Đã kèm {hao_hut}% hao hụt): **{gia_von_cuoi_cung:,.0f} VNĐ**
-            * Lợi nhuận kỳ vọng ({loi_nhuan}%): **{tien_loi:,.0f} VNĐ**
-            """)
-            st.markdown("#### TỔNG BÁO GIÁ CHO LÔ HÀNG:")
-            st.markdown(f"<h2 style='color: #E63946;'>{tong_gia_ban_lo:,.0f} VNĐ</h2>", unsafe_allow_html=True)
-            st.markdown("#### ĐƠN GIÁ TRÊN 1 SẢN PHẨM:")
-            st.markdown(f"<h3 style='color: #2A9D8F;'>{gia_ban_1_cai:,.0f} VNĐ / Đơn vị</h3>", unsafe_allow_html=True)
+            st.markdown("### KẾT LUẬN & ĐÁNH GIÁ")
+            
+            danh_gia = ""
+            if tong_cost == 0 or gia_ban_du_kien == 0:
+                st.info("Vui lòng nhập đủ bảng Cost và Giá bán dự kiến để hệ thống phân tích.")
+                danh_gia = "Chưa đủ dữ liệu"
+            elif margin >= 30:
+                st.success("⭐⭐⭐ RẤT TỐT - ĐÁNG LÀM NGAY!")
+                st.write("Biên lợi nhuận an toàn, thừa sức bù đắp các rủi ro phát sinh. Chốt đơn!")
+                danh_gia = "Rất tốt (Nên làm)"
+            elif 15 <= margin < 30:
+                st.warning("⭐⭐ KHÁ - CÓ THỂ LÀM")
+                st.write("Lợi nhuận tiêu chuẩn. Tuy nhiên cần giám sát chặt chẽ nhân công và vật tư để không bị đội chi phí.")
+                danh_gia = "Khá (Có thể làm)"
+            elif 0 < margin < 15:
+                st.error("⭐ BIÊN MỎNG - RỦI RO LỖ CAO")
+                st.write("Lãi rất mỏng, chỉ cần hư hỏng 1 chút hoặc trễ tiến độ là sẽ chuyển sang lỗ. **Nên đàm phán tăng giá** hoặc **Từ chối**.")
+                danh_gia = "Rủi ro (Cân nhắc từ chối)"
+            else:
+                st.error("🛑 LỖ VỐN - TUYỆT ĐỐI KHÔNG NHẬN")
+                st.write("Dự án không sinh lời, càng làm càng âm vốn. Hủy ngay!")
+                danh_gia = "Lỗ vốn (Từ chối)"
 
     st.markdown("---")
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+    col_btn1, col_btn2 = st.columns([1, 4])
     
-    if col_btn1.button("💾 Lưu Lịch Sử Báo Giá"):
-        if not ten_sp:
-            st.error("⚠️ Vui lòng nhập tên Sản phẩm / Dự án trước khi lưu!")
-        elif tong_chi_phi_goc == 0:
-            st.error("⚠️ Bảng chi phí đang trống. Vui lòng nhập ít nhất 1 chi phí!")
+    if col_btn1.button("💾 Lưu Lưu Lịch Sử Phân Tích"):
+        if not ten_du_an:
+            st.error("⚠️ Vui lòng nhập Tên Công việc / Dự án!")
+        elif tong_cost == 0:
+            st.error("⚠️ Bảng chi phí đang trống!")
         else:
-            with st.spinner("Đang lưu lịch sử..."):
+            with st.spinner("Đang lưu trữ dữ liệu..."):
                 bom_json = edited_cost_df.to_json(orient='records')
-                new_quote = {
+                new_cost_record = {
                     "Ngày": datetime.today().strftime('%d/%m/%Y'),
-                    "Sản phẩm / Dự án": ten_sp,
-                    "Khách hàng": khach_hang,
-                    "SL Lô": so_luong_lo,
-                    "Tổng giá vốn": gia_von_cuoi_cung,
-                    "Hao hụt (%)": hao_hut,
-                    "Lợi nhuận (%)": loi_nhuan,
-                    "Giá bán 1 SP": gia_ban_1_cai,
-                    "Tổng giá bán": tong_gia_ban_lo,
-                    "Chi tiết BOM": bom_json # Đóng gói bảng chi tiết vào 1 ô JSON
+                    "Tên dự án": ten_du_an,
+                    "Ngành nghề": st.session_state.cost_template,
+                    "Quy mô": so_luong_lo,
+                    "Tổng Cost": tong_cost,
+                    "Giá bán": gia_ban_du_kien,
+                    "Lợi nhuận": loi_nhuan,
+                    "Margin (%)": margin,
+                    "Đánh giá": danh_gia,
+                    "Chi tiết BOM": bom_json 
                 }
-                append_data(new_quote, "wanchi_baogia", df_BaoGia)
-            st.success("✅ Đã lưu vào Lịch sử thành công! (Chuyển sang Tab Lịch Sử để xem)")
-            st.rerun()
+                append_data(new_cost_record, "wanchi_costing_v2", df_Costing)
             
-    if col_btn2.button("✨ Làm mới Form Nhập"):
-        st.session_state.costing_items = pd.DataFrame(columns=[
-            "Nhóm chi phí", "Tên hạng mục", "Đơn vị", "Số lượng / Thời gian", "Đơn giá cost", "Tổng cộng"
-        ])
-        st.rerun()
+            # Làm sạch form
+            tao_bang_mau_theo_nganh(st.session_state.cost_template)
+            st.success("✅ Đã cất kết quả vào tủ hồ sơ thành công! (Xem bên Tab Lịch Sử)")
+            st.rerun()
 
 # ------------------------------------------
-# TAB 2: LỊCH SỬ BÁO GIÁ & XUẤT PDF
+# TAB 2: LỊCH SỬ ĐÁNH GIÁ NỘI BỘ
 # ------------------------------------------
 with tab_LichSu:
-    st.subheader("Bảng Tóm Tắt Các Dự Án Đã Tính Giá")
+    st.subheader("Danh Sách Các Dự Án Đã Thẩm Định")
     
-    # Sử dụng column_config để ẩn cột JSON dài dòng nhưng vẫn giữ data khi sửa
-    edited_BaoGia = st.data_editor(
-        df_BaoGia,
+    edited_LichSu = st.data_editor(
+        df_Costing,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Chi tiết BOM": None, # Ẩn cột chứa cấu trúc chi tiết
-            "Tổng giá vốn": st.column_config.NumberColumn(format="%d"),
-            "Giá bán 1 SP": st.column_config.NumberColumn(format="%d"),
-            "Tổng giá bán": st.column_config.NumberColumn(format="%d")
+            "Chi tiết BOM": None, 
+            "Tổng Cost": st.column_config.NumberColumn(format="%d"),
+            "Giá bán": st.column_config.NumberColumn(format="%d"),
+            "Lợi nhuận": st.column_config.NumberColumn(format="%d"),
+            "Margin (%)": st.column_config.NumberColumn(format="%.2f")
         },
-        key="edit_bg"
+        key="edit_cost_history"
     )
 
-    if st.button("💾 Cập nhật thay đổi Lịch Sử"):
-        with st.spinner("Đang đồng bộ..."):
-            save_data(edited_BaoGia, "wanchi_baogia")
+    if st.button("💾 Cập nhật dữ liệu Bảng Lịch Sử"):
+        with st.spinner("Đang cập nhật..."):
+            save_data(edited_LichSu, "wanchi_costing_v2")
         st.success("✅ Đã cập nhật thành công!")
         st.rerun()
 
     st.markdown("---")
-    st.subheader("🔍 Truy Xuất Chi Tiết & In Báo Giá PDF")
+    st.subheader("🔍 Xem Lại Chi Tiết & In Báo Cáo Nội Bộ")
     
-    list_du_an = df_BaoGia["Sản phẩm / Dự án"].dropna().unique().tolist() if not df_BaoGia.empty else []
-    chon_bg = st.selectbox("Chọn dự án để xem lại Chi tiết / Xuất PDF:", ["(Vui lòng chọn)"] + list_du_an)
+    list_du_an = df_Costing["Tên dự án"].dropna().unique().tolist() if not df_Costing.empty else []
+    chon_da = st.selectbox("Chọn dự án để mổ xẻ lại chi phí:", ["(Vui lòng chọn)"] + list_du_an)
     
-    if chon_bg != "(Vui lòng chọn)":
-        row_info = df_BaoGia[df_BaoGia["Sản phẩm / Dự án"] == chon_bg].iloc[0]
+    if chon_da != "(Vui lòng chọn)":
+        row_info = df_Costing[df_Costing["Tên dự án"] == chon_da].iloc[0]
         
         c_thongtin, c_pdf = st.columns([2, 1])
-        c_thongtin.markdown(f"**Khách hàng:** {row_info.get('Khách hàng', '')} | **Đơn giá 1 SP:** {float(row_info['Giá bán 1 SP']):,.0f} VNĐ")
+        c_thongtin.markdown(f"**Lĩnh vực:** {row_info.get('Ngành nghề', '')} | **Kết luận lúc đó:** {row_info.get('Đánh giá', '')} | **Margin:** {float(row_info['Margin (%)']):.2f}%")
         
         try:
-            # Giải nén chuỗi JSON để hiển thị lại bảng chi phí
             df_chitiet = pd.read_json(row_info["Chi tiết BOM"])
             st.dataframe(df_chitiet, use_container_width=True)
             
-            # Tính năng tải PDF Báo Giá
-            if c_pdf.button(f"📄 Tạo file PDF Báo Giá cho {chon_bg}"):
+            if c_pdf.button(f"📄 Tạo Phiếu Phân Tích PDF ({chon_da})"):
                 with st.spinner("Đang trích xuất..."):
-                    pdf_file = export_baogia_pdf(row_info, df_chitiet)
-                file_name = f"TuanQuang_BaoGia_{chon_bg}.pdf"
+                    pdf_file = export_internal_analysis_pdf(row_info, df_chitiet)
+                file_name = f"TuanQuang_PhanTich_{chon_da}.pdf"
                 c_pdf.download_button("⬇️ TẢI PDF XUỐNG", pdf_file, file_name, "application/pdf")
                 
         except Exception as e:
