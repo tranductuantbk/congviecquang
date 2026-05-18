@@ -201,7 +201,7 @@ def save_data(df, table_name):
             df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
         force_reload_cache()
     except Exception as e:
-        st.error(f"⚠️ Lỗi khi lưu dữ liệu ({table_name}): {str(e)}")
+        st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
 # TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU CỦA 1 KHUÔN
 def delete_mold_from_db(mold_code):
@@ -215,7 +215,7 @@ def delete_mold_from_db(mold_code):
             session.commit()
         force_reload_cache()
     except Exception as e:
-        st.error(f"⚠️ Lỗi khi xóa khuôn trên hệ thống: {str(e)}")
+        st.error(f"⚠️ Lỗi khi xóa khuôn trên database: {str(e)}")
 
 
 # ==========================================
@@ -270,7 +270,7 @@ st.markdown("---")
 tab_A, tab_B, tab_C, tab_D, tab_F, tab_E = st.tabs([
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
-    "C. Vật Tư Khuôn", 
+    "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
     "F. Đơn Hàng Gia Công",
     "E. Danh Sách & Quản Trị"
@@ -500,7 +500,7 @@ with tab_F:
             c1, c2 = st.columns(2)
             ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
             
-            list_vendors = df_B["Đơn vị gia công"].dropna().unique().tolist() if not df_B.empty else []
+            list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
             dv_options = ["(Nhập mới)"] + list_vendors
             dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
             dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
@@ -552,14 +552,45 @@ with tab_F:
         
     st.markdown("---")
     st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
-    col_pdf1_f, col_pdf2_f = st.columns([1, 2])
-    filter_pdf_f = col_pdf1_f.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_f")
+    
+    # THÊM BỘ LỌC KÉP ĐỂ TÁCH ĐƠN CHO TỪNG ĐỐI TÁC
+    col_pdf1_f, col_pdf2_f, col_pdf3_f = st.columns([1, 1, 2])
+    
+    filter_pdf_mold_f = col_pdf1_f.selectbox("1. Chọn Mã khuôn:", ["Tất cả"] + list_molds_master, key="pdf_mold_f")
+    
+    # Tự động lọc danh sách đối tác theo mã khuôn đã chọn
+    if filter_pdf_mold_f != "Tất cả":
+        list_vendors_for_mold = edited_F[edited_F["Mã khuôn"] == filter_pdf_mold_f]["Đơn vị gia công"].dropna().unique().tolist()
+    else:
+        list_vendors_for_mold = edited_F["Đơn vị gia công"].dropna().unique().tolist()
+        
+    filter_pdf_vendor_f = col_pdf2_f.selectbox("2. Chọn Đơn vị gia công:", ["Tất cả"] + list_vendors_for_mold, key="pdf_vendor_f")
     
     if st.button("Tạo file PDF (Module F)"):
         with st.spinner("Đang trích xuất file PDF..."):
-            df_export_f = edited_F if filter_pdf_f == "Tất cả" else edited_F[edited_F["Mã khuôn"] == filter_pdf_f]
-            pdf_f = export_pdf(df_export_f, f"ĐƠN HÀNG GIA CÔNG KHUÔN {filter_pdf_f}")
-        col_pdf2_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, f"WANCHI_DonHang_{filter_pdf_f}.pdf", "application/pdf")
+            df_export_f = edited_F.copy()
+            title_pdf = "ĐƠN HÀNG GIA CÔNG"
+            
+            if filter_pdf_mold_f != "Tất cả":
+                df_export_f = df_export_f[df_export_f["Mã khuôn"] == filter_pdf_mold_f]
+                title_pdf += f" {filter_pdf_mold_f}"
+                
+            if filter_pdf_vendor_f != "Tất cả":
+                df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
+                # Nếu lọc tất cả khuôn nhưng lọc 1 đối tác thì ghi tên đối tác vào tiêu đề
+                if filter_pdf_mold_f == "Tất cả":
+                    title_pdf += f" - {filter_pdf_vendor_f}"
+                    
+            pdf_f = export_pdf(df_export_f, title_pdf)
+        
+        # Đặt tên file tải xuống thân thiện để bạn dễ gửi Zalo/Zalo
+        file_name_pdf = f"WANCHI_DonHang_{filter_pdf_mold_f}"
+        if filter_pdf_vendor_f != "Tất cả":
+            file_name_pdf += f"_{filter_pdf_vendor_f}"
+        file_name_pdf += ".pdf"
+        
+        col_pdf3_f.markdown("<br>", unsafe_allow_html=True)
+        col_pdf3_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, file_name_pdf, "application/pdf")
 
 
 # ------------------------------------------
