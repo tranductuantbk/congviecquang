@@ -74,7 +74,7 @@ def export_pdf(df, title):
 
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
-        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn"]
+        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
         
         col_widths = []
         for col in df_export.columns:
@@ -118,7 +118,7 @@ def export_pdf(df, title):
                         val = float(item)
                         val_str = f"{val:,.0f}".replace(",", ".")
                         align_col = 'R'
-                        if col_name in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]:
+                        if col_name in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]:
                             sum_tong_tien += val
                     except: pass
                 
@@ -211,6 +211,7 @@ def delete_mold_from_db(mold_code):
             session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
             session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
             session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code}) # Cập nhật xóa ở Tab F
             session.commit()
         force_reload_cache()
     except Exception as e:
@@ -247,11 +248,17 @@ cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia 
 df_D = load_data("wanchi_d", cols_D)
 df_D = df_D.loc[:, ~df_D.columns.duplicated()]
 
+# Khởi tạo dữ liệu cho Module F (Đơn hàng gia công)
+cols_F = ["Mã khuôn", "Đơn vị gia công", "Các mục gia công", "Thời gian nhận", "Thời gian bàn giao", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ", "Ghi chú"]
+df_F = load_data("wanchi_f", cols_F)
+df_F = df_F.loc[:, ~df_F.columns.duplicated()]
+
 all_molds_set = set()
 if not df_A.empty: all_molds_set.update(df_A["Mã khuôn"].dropna().unique())
 if not df_B.empty: all_molds_set.update(df_B["Mã khuôn"].dropna().unique())
 if not df_C.empty: all_molds_set.update(df_C["Mã khuôn"].dropna().unique())
 if not df_D.empty: all_molds_set.update(df_D["Mã khuôn"].dropna().unique())
+if not df_F.empty: all_molds_set.update(df_F["Mã khuôn"].dropna().unique())
 list_molds_master = sorted(list(all_molds_set))
 
 
@@ -261,12 +268,13 @@ list_molds_master = sorted(list(all_molds_set))
 st.title("🏭 Công Cụ Quản Lý Khuôn Mẫu WANCHI")
 st.markdown("---")
 
-tab_A, tab_B, tab_C, tab_D, tab_E = st.tabs([
+tab_A, tab_B, tab_C, tab_D, tab_F, tab_E = st.tabs([
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
-    "C. Vật Tư Khuôn Mẫu", 
+    "C. Vật Tư Khuôn", 
     "D. Tổng Giá Khuôn",
-    "E. Danh Sách Khuôn"
+    "F. Đơn Hàng Gia Công",
+    "E. Danh Sách & Quản Trị"
 ])
 
 # ------------------------------------------
@@ -482,6 +490,80 @@ with tab_D:
 
 
 # ------------------------------------------
+# MODULE F: ĐƠN HÀNG GIA CÔNG MỚI
+# ------------------------------------------
+with tab_F:
+    st.header("F. Đơn Hàng Gia Công Ngoại")
+    st.markdown("Quản lý dòng tiền đặt cọc và theo dõi tiến độ các hạng mục thuê gia công.")
+    
+    with st.expander("➕ Tạo Đơn Hàng Mới", expanded=True):
+        with st.form("form_f"):
+            c1, c2 = st.columns(2)
+            ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
+            
+            list_vendors = df_B["Đơn vị gia công"].dropna().unique().tolist() if not df_B.empty else []
+            dv_options = ["(Nhập mới)"] + list_vendors
+            dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
+            dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
+            
+            st.markdown("---")
+            danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+            hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
+            
+            c3, c4 = st.columns(2)
+            ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
+            ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
+            
+            st.markdown("---")
+            c5, c6, c7 = st.columns(3)
+            tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
+            coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
+            ghi_chu_f = c7.text_input("Ghi chú")
+            
+            if st.form_submit_button("Lưu Đơn Hàng Mới"):
+                final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
+                if not final_dv:
+                    st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
+                elif not hang_muc:
+                    st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+                else:
+                    with st.spinner("⏳ Đang lưu đơn hàng..."):
+                        con_no = tong_gia_f - coc_f
+                        new_row_f = {
+                            "Mã khuôn": ma_khuon_f.strip().upper(),
+                            "Đơn vị gia công": final_dv,
+                            "Các mục gia công": ", ".join(hang_muc),
+                            "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                            "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                            "Tổng giá gia công": tong_gia_f,
+                            "Cọc đợt 1": coc_f,
+                            "Còn nợ": con_no,
+                            "Ghi chú": ghi_chu_f
+                        }
+                        append_data(new_row_f, "wanchi_f", df_F)
+                    st.rerun()
+
+    st.subheader("Bảng Theo Dõi Đơn Hàng")
+    edited_F = st.data_editor(df_F, num_rows="dynamic", use_container_width=True, key="edit_F")
+    if st.button("💾 Cập nhật dữ liệu F (Lên Neon)"):
+        with st.spinner("⏳ Đang đồng bộ..."):
+            save_data(edited_F, "wanchi_f")
+        st.success("✅ Đã đồng bộ lên cơ sở dữ liệu!")
+        st.rerun()
+        
+    st.markdown("---")
+    st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
+    col_pdf1_f, col_pdf2_f = st.columns([1, 2])
+    filter_pdf_f = col_pdf1_f.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_f")
+    
+    if st.button("Tạo file PDF (Module F)"):
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_f = edited_F if filter_pdf_f == "Tất cả" else edited_F[edited_F["Mã khuôn"] == filter_pdf_f]
+            pdf_f = export_pdf(df_export_f, f"ĐƠN HÀNG GIA CÔNG KHUÔN {filter_pdf_f}")
+        col_pdf2_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, f"WANCHI_DonHang_{filter_pdf_f}.pdf", "application/pdf")
+
+
+# ------------------------------------------
 # MODULE E: DANH SÁCH KHUÔN TỔNG HỢP & QUẢN TRỊ
 # ------------------------------------------
 with tab_E:
@@ -550,12 +632,11 @@ with tab_E:
             
         st.markdown("---")
         st.subheader("🗑️ Khu Vực Quản Trị: Xóa Khuôn")
-        st.warning("⚠️ Công cụ này dùng để xóa toàn bộ dữ liệu của một dự án khuôn lỗi hoặc nhập sai. Thao tác này sẽ dọn sạch dữ liệu ở cả 4 bảng (Vật liệu, Gia công, Vật tư, Tổng hợp) và không thể khôi phục.")
+        st.warning("⚠️ Công cụ này dùng để xóa toàn bộ dữ liệu của một dự án khuôn lỗi hoặc nhập sai. Thao tác này sẽ dọn sạch dữ liệu ở cả 5 bảng và không thể khôi phục.")
         
         col_del1, col_del2 = st.columns([1, 1])
         selected_mold_to_delete = col_del1.selectbox("Chọn mã khuôn cần xóa hoàn toàn:", list_molds_master, key="del_mold_select")
         
-        # Thiết lập cơ chế State để tạo bước xác nhận (hỏi lại)
         if "confirm_delete" not in st.session_state:
             st.session_state.confirm_delete = False
             st.session_state.mold_to_delete = None
@@ -566,7 +647,6 @@ with tab_E:
                 st.session_state.mold_to_delete = selected_mold_to_delete
                 st.rerun()
 
-        # Hiện bảng hỏi lại nếu nút Xóa đã được nhấn
         if st.session_state.get("confirm_delete") and st.session_state.get("mold_to_delete"):
             mold = st.session_state.mold_to_delete
             with st.container(border=True):
