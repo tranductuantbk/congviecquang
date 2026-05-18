@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from sqlalchemy import text
-import json
 
 # --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
 if not st.session_state.get("logged_in", False):
@@ -21,7 +20,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# QUẢN LÝ DỮ LIỆU ĐÁM MÂY (BẢN VÁ LỖI CHỐNG SẬP CLOUD)
+# QUẢN LÝ DỮ LIỆU ĐÁM MÂY (NEON)
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
@@ -57,7 +56,6 @@ def append_data(new_row_dict, table_name, df_current):
 
 def save_data(df, table_name):
     try:
-        # Sử dụng lệnh ghi đè trực tiếp để tránh lỗi Transaction Rollback trên Neon DB
         df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
         force_reload_cache()
     except Exception as e:
@@ -71,7 +69,9 @@ DEFAULT_PLASTICS = [
     {"Tên nhựa": "Nhựa PP", "Tỉ trọng (g/cm3)": 0.90},
     {"Tên nhựa": "Nhựa PC", "Tỉ trọng (g/cm3)": 1.20},
     {"Tên nhựa": "Nhựa POM", "Tỉ trọng (g/cm3)": 1.41},
-    {"Tên nhựa": "Nhựa PVC", "Tỉ trọng (g/cm3)": 1.38}
+    {"Tên nhựa": "Nhựa PVC", "Tỉ trọng (g/cm3)": 1.38},
+    {"Tên nhựa": "Nhựa PA6", "Tỉ trọng (g/cm3)": 1.14},
+    {"Tên nhựa": "Nhựa Acrylic / Mica", "Tỉ trọng (g/cm3)": 1.18}
 ]
 
 df_plastics = load_data("wanchi_plastics", ["Tên nhựa", "Tỉ trọng (g/cm3)"])
@@ -79,42 +79,41 @@ if df_plastics.empty:
     df_plastics = pd.DataFrame(DEFAULT_PLASTICS)
     save_data(df_plastics, "wanchi_plastics")
 
-# Loại bỏ trùng lặp nếu có
 df_plastics = df_plastics.loc[:, ~df_plastics.columns.duplicated()]
 
 # ==========================================
 # KHỞI TẠO BẢNG LỊCH SỬ TÍNH TRỌNG LƯỢNG
 # ==========================================
-cols_Weights = ["Ngày", "Khách hàng", "Tên sản phẩm", "Loại nhựa", "Tỉ trọng áp dụng", "Tổng trọng lượng (gram)", "Chi tiết khối"]
+cols_Weights = ["Ngày", "Khách hàng", "Tên sản phẩm", "Loại nhựa", "Tỉ trọng", "Tổng trọng lượng (gram)", "Chi tiết khối"]
 df_Weights = load_data("wanchi_weights", cols_Weights)
 df_Weights = df_Weights.loc[:, ~df_Weights.columns.duplicated()]
 
 # Biến tạm lưu các dòng tính toán
 if "weight_items" not in st.session_state:
     st.session_state.weight_items = pd.DataFrame(columns=[
-        "Tên/Khu vực bộ phận", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
+        "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
     ])
 
 # ==========================================
 # GIAO DIỆN CHÍNH
 # ==========================================
-st.title("⚖️ Công Cụ Tính Trọng Lượng Sản Phẩm Nhựa")
-st.markdown("Quy đổi tự động từ Kích thước sang Thể tích và Trọng lượng dựa theo tỉ trọng của từng loại nguyên vật liệu.")
+st.title("⚖️ Công Cụ Tính Trọng Lượng Nhựa (Công Thức Chuẩn)")
+st.markdown("Áp dụng công thức: **Thể tích (cm³)** = (Dài × Rộng × Dày) / 1000. **Trọng lượng (g)** = Thể tích × Tỉ trọng.")
 st.markdown("---")
 
-tab_TinhToan, tab_LichSu, tab_CauHinh = st.tabs(["🧩 TÍNH TRỌNG LƯỢNG", "🗂️ LỊCH SỬ ĐÃ TÍNH", "⚙️ CẤU HÌNH TỈ TRỌNG VẬT LIỆU"])
+tab_TinhToan, tab_LichSu, tab_CauHinh = st.tabs(["🧩 NHẬP KÍCH THƯỚC & TÍNH TOÁN", "🗂️ LỊCH SỬ ĐÃ TÍNH", "⚙️ CẤU HÌNH TỈ TRỌNG NHỰA"])
 
 # ------------------------------------------
 # TAB 1: BẢNG TÍNH TRỌNG LƯỢNG
 # ------------------------------------------
 with tab_TinhToan:
     with st.container(border=True):
-        st.subheader("1. Thông tin Sản phẩm & Vật liệu")
+        st.subheader("1. Thông tin Sản phẩm & Tỉ trọng")
         c1, c2, c3 = st.columns([1.5, 1.5, 2])
         khach_hang = c1.text_input("Tên Khách hàng:")
         ten_sp = c2.text_input("Tên Sản phẩm:")
         
-        # Tạo danh sách thả xuống kết hợp tên và tỉ trọng để dễ nhìn
+        # Danh sách xổ xuống lấy trực tiếp từ Tab 3 (Cấu hình)
         danh_sach_nhua = []
         dict_ti_trong = {}
         for _, row in df_plastics.iterrows():
@@ -122,55 +121,55 @@ with tab_TinhToan:
             ti_trong = row["Tỉ trọng (g/cm3)"]
             label = f"{ten} (Tỉ trọng: {ti_trong})"
             danh_sach_nhua.append(label)
-            dict_ti_trong[label] = ti_trong
+            dict_ti_trong[label] = float(ti_trong)
             
         chon_nhua = c3.selectbox("Chọn Nguyên Vật Liệu:", danh_sach_nhua)
         ti_trong_hien_tai = dict_ti_trong.get(chon_nhua, 1.0)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("2. Khai báo kích thước từng phần")
-    st.info("💡 Hướng dẫn: Cuộn xuống cuối bảng và ấn biểu tượng '+' để thêm nhiều khối hình học. Hệ thống sẽ tự động tính Thể tích và Trọng lượng.")
+    st.subheader("2. Khai báo Kích thước (Máy tự tính Dấu +)")
+    st.info("💡 Hướng dẫn: Gõ xong Dài, Rộng, Dày rồi bấm Enter. Hệ thống sẽ tự nảy số. Ấn biểu tượng '+' cuối bảng để thêm bao nhiêu chi tiết tùy thích.")
     
     edited_weight_df = st.data_editor(
         st.session_state.weight_items,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Tên/Khu vực bộ phận": st.column_config.TextColumn("Tên/Khu vực bộ phận (VD: Mặt đáy, Gân tăng cứng...)"),
+            "Khu vực / Tên chi tiết": st.column_config.TextColumn("Khu vực / Tên chi tiết"),
             "Dài (mm)": st.column_config.NumberColumn("Dài (mm)", min_value=0.0, format="%.2f"),
             "Rộng (mm)": st.column_config.NumberColumn("Rộng (mm)", min_value=0.0, format="%.2f"),
             "Dày (mm)": st.column_config.NumberColumn("Dày (mm)", min_value=0.0, format="%.2f"),
-            "Thể tích (cm3)": st.column_config.NumberColumn("Thể tích (cm3) - Tự tính", disabled=True),
-            "Trọng lượng (gram)": st.column_config.NumberColumn("Trọng lượng (gram) - Tự tính", disabled=True)
+            "Thể tích (cm3)": st.column_config.NumberColumn("Thể tích (cm3)", disabled=True, format="%.3f"),
+            "Trọng lượng (gram)": st.column_config.NumberColumn("Trọng lượng (gram)", disabled=True, format="%.2f")
         },
         key="weight_editor"
     )
 
     tong_trong_luong = 0
     if not edited_weight_df.empty:
-        # Ép kiểu dữ liệu về số
-        edited_weight_df["Dài (mm)"] = pd.to_numeric(edited_weight_df["Dài (mm)"], errors="coerce").fillna(0)
-        edited_weight_df["Rộng (mm)"] = pd.to_numeric(edited_weight_df["Rộng (mm)"], errors="coerce").fillna(0)
-        edited_weight_df["Dày (mm)"] = pd.to_numeric(edited_weight_df["Dày (mm)"], errors="coerce").fillna(0)
+        # Ép kiểu dữ liệu về dạng số để tính toán
+        edited_weight_df["Dài (mm)"] = pd.to_numeric(edited_weight_df["Dài (mm)"], errors="coerce").fillna(0.0)
+        edited_weight_df["Rộng (mm)"] = pd.to_numeric(edited_weight_df["Rộng (mm)"], errors="coerce").fillna(0.0)
+        edited_weight_df["Dày (mm)"] = pd.to_numeric(edited_weight_df["Dày (mm)"], errors="coerce").fillna(0.0)
         
-        # Tính Thể tích (cm3) = (Dài * Rộng * Dày) / 1000
-        edited_weight_df["Thể tích (cm3)"] = (edited_weight_df["Dài (mm)"] * edited_weight_df["Rộng (mm)"] * edited_weight_df["Dày (mm)"]) / 1000
-        
-        # Tính Trọng lượng (gram) = Thể tích (cm3) * Tỉ trọng
+        # ÁP DỤNG CÔNG THỨC CHUẨN
+        edited_weight_df["Thể tích (cm3)"] = (edited_weight_df["Dài (mm)"] * edited_weight_df["Rộng (mm)"] * edited_weight_df["Dày (mm)"]) / 1000.0
         edited_weight_df["Trọng lượng (gram)"] = edited_weight_df["Thể tích (cm3)"] * ti_trong_hien_tai
         
         tong_trong_luong = edited_weight_df["Trọng lượng (gram)"].sum()
         
-        # Lưu ngược lại vào session để giao diện cập nhật ngay lập tức (Xóa chữ None)
-        st.session_state.weight_items = edited_weight_df.copy()
+        # Thuật toán so sánh: Nếu thông tin người dùng nhập vào thay đổi, lưu lại và chạy lại web để số hiện ra ngay
+        input_cols = ["Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)"]
+        if not edited_weight_df[input_cols].equals(st.session_state.weight_items[input_cols]):
+            st.session_state.weight_items = edited_weight_df.copy()
+            st.rerun()
 
     st.markdown("---")
     c_kq1, c_kq2 = st.columns([2, 1])
     
     with c_kq1:
         st.markdown("### KẾT QUẢ TÍNH TOÁN TỔNG")
-        st.write(f"- Vật liệu áp dụng: **{chon_nhua}**")
-        st.write(f"- Tỉ trọng: **{ti_trong_hien_tai} g/cm3**")
+        st.write(f"- Vật liệu quy đổi: **{chon_nhua}**")
         st.markdown(f"<h2 style='color: #E63946;'>Tổng Trọng Lượng: {tong_trong_luong:,.2f} gram</h2>", unsafe_allow_html=True)
         if tong_trong_luong > 0:
             kg = tong_trong_luong / 1000
@@ -178,20 +177,20 @@ with tab_TinhToan:
 
     with c_kq2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Lưu Lịch Sử Tính Toán Này", use_container_width=True):
-            if not ten_sp or not khach_hang:
-                st.error("⚠️ Vui lòng nhập Tên khách hàng và Tên sản phẩm!")
+        if st.button("💾 Lưu Váo Lịch Sử Tính Toán", use_container_width=True):
+            if not ten_sp:
+                st.error("⚠️ Vui lòng nhập ít nhất Tên sản phẩm!")
             elif tong_trong_luong == 0:
-                st.error("⚠️ Bảng kích thước đang trống hoặc bằng 0!")
+                st.error("⚠️ Bảng kích thước chưa có số liệu!")
             else:
-                with st.spinner("Đang lưu trữ dữ liệu..."):
+                with st.spinner("Đang cất dữ liệu vào máy chủ..."):
                     chi_tiet_json = edited_weight_df.to_json(orient='records')
                     new_record = {
                         "Ngày": datetime.today().strftime('%d/%m/%Y'),
                         "Khách hàng": khach_hang,
                         "Tên sản phẩm": ten_sp,
                         "Loại nhựa": chon_nhua.split(" (")[0], 
-                        "Tỉ trọng áp dụng": ti_trong_hien_tai,
+                        "Tỉ trọng": ti_trong_hien_tai,
                         "Tổng trọng lượng (gram)": tong_trong_luong,
                         "Chi tiết khối": chi_tiet_json 
                     }
@@ -199,14 +198,14 @@ with tab_TinhToan:
                 
                 # Làm sạch bảng sau khi lưu
                 st.session_state.weight_items = pd.DataFrame(columns=[
-                    "Tên/Khu vực bộ phận", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
+                    "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
                 ])
-                st.success("✅ Đã lưu kết quả thành công! (Xem bên Tab Lịch Sử)")
+                st.success("✅ Đã lưu kết quả thành công! (Chuyển sang Tab Lịch Sử để xem)")
                 st.rerun()
                 
         if st.button("✨ Xóa Trắng Bảng Để Tính Lại", use_container_width=True):
             st.session_state.weight_items = pd.DataFrame(columns=[
-                "Tên/Khu vực bộ phận", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
+                "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
             ])
             st.rerun()
 
@@ -221,28 +220,28 @@ with tab_LichSu:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Chi tiết khối": None, 
-            "Tỉ trọng áp dụng": st.column_config.NumberColumn(format="%.2f"),
+            "Chi tiết khối": None, # Ẩn đi cho đỡ rối mắt
+            "Tỉ trọng": st.column_config.NumberColumn(format="%.2f"),
             "Tổng trọng lượng (gram)": st.column_config.NumberColumn(format="%.2f")
         },
         key="edit_weights_history"
     )
 
-    if st.button("💾 Cập nhật dữ liệu Bảng Lịch Sử"):
+    if st.button("💾 Cập nhật thay đổi Lịch Sử"):
         with st.spinner("Đang cập nhật..."):
             save_data(edited_LichSu, "wanchi_weights")
-        st.success("✅ Đã cập nhật thành công!")
+        st.success("✅ Đã lưu thay đổi thành công!")
         st.rerun()
 
     st.markdown("---")
-    st.subheader("🔍 Xem Lại Kích Thước Chi Tiết Khối")
+    st.subheader("🔍 Xem Lại Khối Lượng Từng Phần")
     
     list_sp = df_Weights["Tên sản phẩm"].dropna().unique().tolist() if not df_Weights.empty else []
-    chon_sp = st.selectbox("Chọn Sản phẩm để xem lại các kích thước cấu thành:", ["(Vui lòng chọn)"] + list_sp)
+    chon_sp = st.selectbox("Chọn Sản phẩm để bóc tách lại kích thước:", ["(Vui lòng chọn)"] + list_sp)
     
     if chon_sp != "(Vui lòng chọn)":
         row_info = df_Weights[df_Weights["Tên sản phẩm"] == chon_sp].iloc[0]
-        st.markdown(f"**Khách hàng:** {row_info.get('Khách hàng', '')} | **Vật liệu:** {row_info.get('Loại nhựa', '')} | **Tổng:** {float(row_info['Tổng trọng lượng (gram)']):,.2f} gram")
+        st.markdown(f"**Khách hàng:** {row_info.get('Khách hàng', '')} | **Vật liệu:** {row_info.get('Loại nhựa', '')} | **Tổng Khối lượng:** {float(row_info['Tổng trọng lượng (gram)']):,.2f} gram")
         
         try:
             df_chitiet = pd.read_json(row_info["Chi tiết khối"])
@@ -255,13 +254,13 @@ with tab_LichSu:
 # ------------------------------------------
 with tab_CauHinh:
     st.header("⚙️ Cấu Hình Tỉ Trọng Nguyên Vật Liệu")
-    st.markdown("Vì mỗi nhà cung cấp hoặc mỗi loại nhựa pha (nhựa tái sinh, thêm bột thủy tinh...) sẽ có tỉ trọng khác nhau. Tại đây bạn có thể chủ động **Thêm, Sửa, Xóa** danh sách nhựa của xưởng.")
+    st.markdown("Các loại nhựa khác nhau sẽ có tỉ trọng khác nhau (Nhựa pha, nhựa tái sinh, nhựa zin...). Tại đây bạn có thể chủ động **Thêm, Sửa, Xóa** danh sách nhựa của xưởng.")
     
     c_edit_nhua, c_add_nhua = st.columns([2, 1])
     
     with c_edit_nhua.container(border=True):
-        st.subheader("Danh Sách Tỉ Trọng Hiện Có")
-        st.info("💡 Bạn có thể sửa tên, xóa dòng hoặc thêm dòng mới bằng nút '+' ở cuối bảng.")
+        st.subheader("Danh Sách Tỉ Trọng Tại Xưởng")
+        st.info("💡 Bạn có thể sửa tên, sửa tỉ trọng, xóa dòng hoặc thêm loại nhựa mới bằng nút '+' ở cuối bảng.")
         
         edited_plastics = st.data_editor(
             df_plastics, 
@@ -277,18 +276,19 @@ with tab_CauHinh:
         if st.button("💾 Cập nhật & Lưu Danh Sách Nhựa"):
             with st.spinner("Đang cập nhật lên máy chủ..."):
                 save_data(edited_plastics, "wanchi_plastics")
-            st.success("✅ Cập nhật thành công! Danh sách xổ xuống ở Tab 1 đã được đồng bộ.")
+            st.success("✅ Cập nhật thành công! Danh sách xổ xuống ở Tab 1 đã tự động nhận dữ liệu mới.")
             st.rerun()
 
     with c_add_nhua.container(border=True):
-        st.subheader("Bảng Tham Khảo Nhanh")
+        st.subheader("Bảng Tham Khảo Kỹ Thuật")
         st.markdown("""
-        * **ABS:** ~ 1.04 g/cm3
-        * **PP:** ~ 0.90 - 0.92 g/cm3
-        * **PC:** ~ 1.20 g/cm3
-        * **POM:** ~ 1.41 - 1.42 g/cm3
-        * **PA6:** ~ 1.14 g/cm3
-        * **PVC:** ~ 1.38 g/cm3
-        * **PE:** ~ 0.95 g/cm3
-        * **Acrylic:** ~ 1.18 g/cm3
+        * **ABS:** 1.04 g/cm³
+        * **PP:** 0.90 - 0.92 g/cm³
+        * **PC:** 1.20 g/cm³
+        * **POM:** 1.41 - 1.42 g/cm³
+        * **PA6:** 1.14 g/cm³
+        * **PVC:** 1.38 g/cm³
+        * **PE:** 0.95 g/cm³
+        * **Mica (Acrylic):** 1.18 g/cm³
+        * **Silicon/TPE:** ~1.15 g/cm³
         """)
