@@ -21,12 +21,12 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# QUẢN LÝ DỮ LIỆU ĐÁM MÂY
+# QUẢN LÝ DỮ LIỆU ĐÁM MÂY (BẢN VÁ LỖI CHỐNG SẬP CLOUD)
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
     try:
-        return conn.query(f"SELECT * FROM {table_name}", ttl=0)
+        return conn.query(f'SELECT * FROM "{table_name}"', ttl=0)
     except Exception:
         return pd.DataFrame()
 
@@ -50,21 +50,18 @@ def append_data(new_row_dict, table_name, df_current):
     except Exception:
         try:
             df_combined = pd.concat([df_current, pd.DataFrame([new_row_dict])], ignore_index=True)
-            df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
+            df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
             force_reload_cache()
         except Exception as e2:
-            st.error(f"⚠️ Lỗi: {str(e2)}")
+            st.error(f"⚠️ Lỗi cấu trúc: {str(e2)}")
 
 def save_data(df, table_name):
     try:
-        with conn.session as session:
-            session.execute(text(f"TRUNCATE TABLE {table_name}"))
-            session.commit()
-        df.to_sql(table_name, con=conn.engine, if_exists='append', index=False, method='multi')
+        # Sử dụng lệnh ghi đè trực tiếp để tránh lỗi Transaction Rollback trên Neon DB
+        df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
         force_reload_cache()
-    except Exception:
-        df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
-        force_reload_cache()
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
 # ==========================================
 # KHỞI TẠO BẢNG TỪ ĐIỂN TỈ TRỌNG NHỰA
@@ -193,7 +190,7 @@ with tab_TinhToan:
                         "Ngày": datetime.today().strftime('%d/%m/%Y'),
                         "Khách hàng": khach_hang,
                         "Tên sản phẩm": ten_sp,
-                        "Loại nhựa": chon_nhua.split(" (")[0], # Lấy phần tên nhựa
+                        "Loại nhựa": chon_nhua.split(" (")[0], 
                         "Tỉ trọng áp dụng": ti_trong_hien_tai,
                         "Tổng trọng lượng (gram)": tong_trong_luong,
                         "Chi tiết khối": chi_tiet_json 
@@ -224,7 +221,7 @@ with tab_LichSu:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Chi tiết khối": None, # Ẩn cột JSON
+            "Chi tiết khối": None, 
             "Tỉ trọng áp dụng": st.column_config.NumberColumn(format="%.2f"),
             "Tổng trọng lượng (gram)": st.column_config.NumberColumn(format="%.2f")
         },
