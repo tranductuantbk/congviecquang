@@ -88,11 +88,10 @@ cols_Weights = ["Ngày", "Khách hàng", "Tên sản phẩm", "Loại nhựa", "
 df_Weights = load_data("wanchi_weights", cols_Weights)
 df_Weights = df_Weights.loc[:, ~df_Weights.columns.duplicated()]
 
-# Biến tạm lưu các dòng tính toán
-if "weight_items" not in st.session_state:
-    st.session_state.weight_items = pd.DataFrame(columns=[
-        "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
-    ])
+# ---> BẢN VÁ LỖI BỘ NHỚ TẠM (SESSION STATE) <---
+expected_cols = ["Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"]
+if "weight_items" not in st.session_state or list(st.session_state.weight_items.columns) != expected_cols:
+    st.session_state.weight_items = pd.DataFrame(columns=expected_cols)
 
 # ==========================================
 # GIAO DIỆN CHÍNH
@@ -113,7 +112,6 @@ with tab_TinhToan:
         khach_hang = c1.text_input("Tên Khách hàng:")
         ten_sp = c2.text_input("Tên Sản phẩm:")
         
-        # Danh sách xổ xuống lấy trực tiếp từ Tab 3 (Cấu hình)
         danh_sach_nhua = []
         dict_ti_trong = {}
         for _, row in df_plastics.iterrows():
@@ -158,11 +156,12 @@ with tab_TinhToan:
         
         tong_trong_luong = edited_weight_df["Trọng lượng (gram)"].sum()
         
-        # Thuật toán so sánh: Nếu thông tin người dùng nhập vào thay đổi, lưu lại và chạy lại web để số hiện ra ngay
+        # ---> LỚP BẢO VỆ CHỐNG LỖI KEYERROR KHI AUTO-RERUN <---
         input_cols = ["Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)"]
-        if not edited_weight_df[input_cols].equals(st.session_state.weight_items[input_cols]):
-            st.session_state.weight_items = edited_weight_df.copy()
-            st.rerun()
+        if all(c in edited_weight_df.columns for c in input_cols) and all(c in st.session_state.weight_items.columns for c in input_cols):
+            if not edited_weight_df[input_cols].equals(st.session_state.weight_items[input_cols]):
+                st.session_state.weight_items = edited_weight_df.copy()
+                st.rerun()
 
     st.markdown("---")
     c_kq1, c_kq2 = st.columns([2, 1])
@@ -197,16 +196,12 @@ with tab_TinhToan:
                     append_data(new_record, "wanchi_weights", df_Weights)
                 
                 # Làm sạch bảng sau khi lưu
-                st.session_state.weight_items = pd.DataFrame(columns=[
-                    "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
-                ])
+                st.session_state.weight_items = pd.DataFrame(columns=expected_cols)
                 st.success("✅ Đã lưu kết quả thành công! (Chuyển sang Tab Lịch Sử để xem)")
                 st.rerun()
                 
         if st.button("✨ Xóa Trắng Bảng Để Tính Lại", use_container_width=True):
-            st.session_state.weight_items = pd.DataFrame(columns=[
-                "Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"
-            ])
+            st.session_state.weight_items = pd.DataFrame(columns=expected_cols)
             st.rerun()
 
 # ------------------------------------------
@@ -220,7 +215,7 @@ with tab_LichSu:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Chi tiết khối": None, # Ẩn đi cho đỡ rối mắt
+            "Chi tiết khối": None, 
             "Tỉ trọng": st.column_config.NumberColumn(format="%.2f"),
             "Tổng trọng lượng (gram)": st.column_config.NumberColumn(format="%.2f")
         },
