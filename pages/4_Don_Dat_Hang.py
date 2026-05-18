@@ -14,7 +14,7 @@ if not st.session_state.get("logged_in", False):
 # ==========================================
 # CẤU HÌNH TRANG & THƯ MỤC HÌNH ẢNH
 # ==========================================
-st.set_page_config(page_title="WANCHI - Đơn Đặt Hàng & Giao Việc", layout="wide")
+st.set_page_config(page_title="Tuấn Quang - Đơn Đặt Hàng & Giao Việc", layout="wide")
 
 # Tự động tạo thư mục lưu trữ ảnh trên máy chủ nếu chưa có
 IMG_DIR = "attached_images"
@@ -49,7 +49,7 @@ def export_pdf(df, title):
         font_name = 'Arial'
         st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
-    # --- Header Phiếu ---
+    # --- Header Phiếu (Đã sửa theo yêu cầu) ---
     logo_path = "logo.png" 
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=10, y=8, w=35)
@@ -59,12 +59,10 @@ def export_pdf(df, title):
 
     pdf.set_xy(start_x, 10)
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 14)
-    pdf.cell(0, 6, txt="WANCHI", ln=True, align='L')
+    pdf.cell(0, 6, txt="Tuấn Quang", ln=True, align='L')
     pdf.set_x(start_x)
     pdf.set_font(font_name, '', 10)
-    pdf.cell(0, 5, txt="775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM", ln=True, align='L')
-    pdf.set_x(start_x)
-    pdf.cell(0, 5, txt="SĐT: 0902.580.828 - 0937.572.577", ln=True, align='L')
+    pdf.cell(0, 5, txt="Liên hệ: 0937572577", ln=True, align='L')
     pdf.ln(10)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
@@ -377,5 +375,5 @@ with tab_LichSu:
                 
             pdf_file = export_pdf(df_export, title_pdf)
         
-        file_name = f"WANCHI_DatHang_{filter_pdf}.pdf"
+        file_name = f"TuanQuang_DatHang_{filter_pdf}.pdf"
         col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_file, file_name, "application/pdf")
