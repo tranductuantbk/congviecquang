@@ -25,7 +25,7 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP <---
+# ---> HÀM XUẤT PDF ĐÃ NÂNG CẤP (TỰ ĐỘNG XUỐNG DÒNG & CHIA TỶ LỆ) <---
 def export_pdf(df, title):
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
@@ -42,6 +42,7 @@ def export_pdf(df, title):
         font_name = 'Arial'
         st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
+    # --- Header (Logo & Thông tin) ---
     logo_path = "logo.png" 
     try:
         if os.path.exists(logo_path):
@@ -64,21 +65,21 @@ def export_pdf(df, title):
     pdf.cell(0, 5, txt="SĐT: 0902.580.828 - 0937.572.577", ln=True, align='L')
     
     pdf.ln(10)
-
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     pdf.cell(0, 10, txt=title.upper(), ln=True, align='C')
-    
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
     pdf.ln(5)
 
+    # --- Bảng Dữ Liệu ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
         
+        # 1. Tính toán chiều rộng lý tưởng cho từng cột
         col_widths = []
         for col in df_export.columns:
-            max_w = pdf.get_string_width(str(col)) + 4 
+            max_w = pdf.get_string_width(str(col)) + 4  # Dành chỗ cho Header
             for item in df_export[col]:
                 val_str = str(item)
                 if pd.notnull(item) and str(item).strip() != "":
@@ -86,68 +87,103 @@ def export_pdf(df, title):
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
                         except: pass
-                item_w = pdf.get_string_width(val_str) + 4
+                # Giới hạn chiều rộng tối đa (ví dụ 45mm) để ép các ô nhiều chữ phải xuống dòng
+                item_w = min(pdf.get_string_width(val_str) + 4, 45) 
                 if item_w > max_w:
                     max_w = item_w
             col_widths.append(max_w)
         
+        # Co giãn bề ngang cho vừa khổ giấy A4 (277mm khả dụng)
         total_w = sum(col_widths)
         if total_w > 0:
             scale = 277 / total_w
             col_widths = [w * scale for w in col_widths]
 
+        # 2. In Header
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
         pdf.set_fill_color(220, 220, 220)
         for i, col in enumerate(df_export.columns):
-            header_str = str(col)
-            while pdf.get_string_width(header_str) > col_widths[i] - 1 and len(header_str) > 0:
-                header_str = header_str[:-1]
-            pdf.cell(col_widths[i], 8, txt=header_str, border=1, fill=True, align='C')
+            pdf.cell(col_widths[i], 8, txt=str(col), border=1, fill=True, align='C')
         pdf.ln()
         
+        # 3. In Dữ Liệu (Xử lý Text Wrapping)
         pdf.set_font(font_name, '', 8)
-        sum_tong_tien = 0 
+        
+        # Khởi tạo bộ đếm tổng cho từng cột số
+        col_sums = {c: 0.0 for c in df_export.columns}
         
         for _, row in df_export.iterrows():
+            row_texts = []
+            row_aligns = []
+            
+            # Chuẩn bị dữ liệu và tính tổng
             for i, (col_name, item) in enumerate(row.items()):
                 val_str = str(item) if pd.notnull(item) else ""
                 align_col = 'L'
-                
                 if col_name in num_cols and str(item).strip() != "":
                     try:
                         val = float(item)
                         val_str = f"{val:,.0f}".replace(",", ".")
                         align_col = 'R'
-                        if col_name in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]:
-                            sum_tong_tien += val
+                        col_sums[col_name] += val
                     except: pass
-                
-                while pdf.get_string_width(val_str) > col_widths[i] - 1 and len(val_str) > 0:
-                    val_str = val_str[:-1]
-
-                pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
-            pdf.ln()
+                row_texts.append(val_str)
+                row_aligns.append(align_col)
             
-        if any(c in df_export.columns for c in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]):
+            # Tính toán chiều cao cần thiết cho hàng (dựa trên cột chứa nhiều dòng nhất)
+            line_height = 5
+            max_lines = 1
+            for i, text_val in enumerate(row_texts):
+                est_width = pdf.get_string_width(text_val) * 1.1 # Thêm 10% dung sai
+                lines = int(est_width / (col_widths[i] - 1)) + 1
+                lines += text_val.count('\n') # Cộng thêm số lần người dùng cố tình Enter
+                if lines > max_lines:
+                    max_lines = lines
+            
+            row_height = max_lines * line_height
+            
+            # Sang trang mới nếu hàng này vượt quá lề dưới
+            if pdf.get_y() + row_height > 190: 
+                pdf.add_page()
+            
+            # Vẽ từng ô bằng MultiCell để cho phép xuống dòng
+            x_start = pdf.get_x()
+            y_start = pdf.get_y()
+            
+            for i, text_val in enumerate(row_texts):
+                pdf.set_xy(x_start, y_start)
+                pdf.multi_cell(col_widths[i], line_height, txt=text_val, border=0, align=row_aligns[i])
+                
+                # Vẽ khung (Border) trùm lên vùng chữ
+                pdf.set_xy(x_start, y_start)
+                pdf.cell(col_widths[i], row_height, border=1)
+                
+                x_start += col_widths[i]
+            
+            # Đưa con trỏ xuống hàng tiếp theo
+            pdf.set_y(y_start + row_height)
+            
+        # 4. In Dòng TỔNG CỘNG (Cộng độc lập từng cột)
+        cols_to_sum = ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
+        if any(c in df_export.columns for c in cols_to_sum):
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
             
             for i, col in enumerate(df_export.columns):
-                if col in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]:
-                    tong_str = f"{sum_tong_tien:,.0f}".replace(",", ".")
+                if col in cols_to_sum:
+                    tong_str = f"{col_sums[col]:,.0f}".replace(",", ".")
                     pdf.cell(col_widths[i], 8, txt=tong_str, border=1, fill=True, align='R')
-                elif i == len(df_export.columns) - 2: 
+                elif i == 1: # Chữ TỔNG CỘNG để ở cột thứ 2 cho cân đối
                     pdf.cell(col_widths[i], 8, txt="TỔNG CỘNG:", border=1, fill=True, align='R')
                 else:
                     pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
             pdf.ln()
             
+    # --- Lưu và trả về File ---
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
-    
     with open(temp_filename, "rb") as f:
         pdf_bytes = f.read()
-        
     if os.path.exists(temp_filename):
         os.remove(temp_filename)
         
@@ -211,7 +247,7 @@ def delete_mold_from_db(mold_code):
             session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
             session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
             session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code}) # Cập nhật xóa ở Tab F
+            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code})
             session.commit()
         force_reload_cache()
     except Exception as e:
@@ -248,7 +284,6 @@ cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia 
 df_D = load_data("wanchi_d", cols_D)
 df_D = df_D.loc[:, ~df_D.columns.duplicated()]
 
-# Khởi tạo dữ liệu cho Module F (Đơn hàng gia công)
 cols_F = ["Mã khuôn", "Đơn vị gia công", "Các mục gia công", "Thời gian nhận", "Thời gian bàn giao", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ", "Ghi chú"]
 df_F = load_data("wanchi_f", cols_F)
 df_F = df_F.loc[:, ~df_F.columns.duplicated()]
