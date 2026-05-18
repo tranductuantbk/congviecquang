@@ -163,7 +163,7 @@ def export_internal_analysis_pdf(summary_row, df_detail):
     pdf.ln(10)
 
     pdf.set_font(font_name, 'B', 16)
-    pdf.cell(0, 10, txt="PHIẾU PHÂN TÍCH COST & TÍNH KHẢ THI DỰ ÁN", ln=True, align='C')
+    pdf.cell(0, 10, txt="PHIẾU PHÂN TÍCH TÀI CHÍNH & TÍNH KHẢ THI DỰ ÁN", ln=True, align='C')
     pdf.ln(5)
     
     pdf.set_font(font_name, '', 11)
@@ -261,7 +261,6 @@ with tab_TinhCost:
         st.subheader("Bước 1: Chọn Ngành Nghề & Thiết Lập Dự Án")
         c_nganh, c_btn = st.columns([3, 1])
         if list_nganh_nghe:
-            # Dropdown chọn ngành nghề
             nganh_chon = c_nganh.selectbox("Lĩnh vực kinh doanh / Loại dự án:", list_nganh_nghe, key="select_nganh")
         else:
             nganh_chon = ""
@@ -295,7 +294,7 @@ with tab_TinhCost:
         column_config={
             "Nhóm chi phí": st.column_config.SelectboxColumn(
                 "Nhóm Phân Loại",
-                options=current_categories, # Cột này giờ đây linh hoạt đổi liền theo lựa chọn của bạn
+                options=current_categories,
                 required=True
             ),
             "Tên chi tiết": st.column_config.TextColumn("Tên chi tiết cụ thể", required=True),
@@ -313,6 +312,9 @@ with tab_TinhCost:
         edited_cost_df["Đơn giá"] = pd.to_numeric(edited_cost_df["Đơn giá"], errors="coerce").fillna(0)
         edited_cost_df["Thành tiền"] = edited_cost_df["Định mức"] * edited_cost_df["Đơn giá"]
         tong_cost = edited_cost_df["Thành tiền"].sum()
+        
+        # LƯU KẾT QUẢ VÀO STATE ĐỂ TỰ ĐỘNG HIỂN THỊ SỐ TIỀN BỎ CHỮ "NONE"
+        st.session_state.cost_items = edited_cost_df.copy()
 
     st.markdown("---")
     st.subheader("Bước 3: Phân Tích Khả Thi (Go / No-Go)")
@@ -380,7 +382,6 @@ with tab_TinhCost:
                 }
                 append_data(new_cost_record, "wanchi_costing_v2", df_Costing)
             
-            # Reset lại form sau khi lưu
             tao_bang_mau_theo_nganh(nganh_chon)
             st.success("✅ Đã cất kết quả vào tủ hồ sơ thành công! (Xem bên Tab Lịch Sử)")
             st.rerun()
