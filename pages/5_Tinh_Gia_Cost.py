@@ -104,16 +104,13 @@ DEFAULT_TEMPLATES = {
     ]
 }
 
-# Tải bảng wanchi_templates từ CSDL
 df_templates = load_data("wanchi_templates", ["Tên ngành nghề", "Danh sách chi phí"])
 
-# Nếu CSDL chưa có bảng Template, nạp dữ liệu mặc định vào
 if df_templates.empty:
     rows = [{"Tên ngành nghề": k, "Danh sách chi phí": json.dumps(v, ensure_ascii=False)} for k, v in DEFAULT_TEMPLATES.items()]
     df_templates = pd.DataFrame(rows)
     save_data(df_templates, "wanchi_templates")
 
-# Giải mã JSON thành Dictionary Python để dùng
 dynamic_templates = {}
 for _, row in df_templates.iterrows():
     try:
@@ -123,10 +120,6 @@ for _, row in df_templates.iterrows():
 
 list_nganh_nghe = sorted(list(dynamic_templates.keys()))
 
-# Khởi tạo trạng thái ban đầu
-if "cost_template" not in st.session_state or st.session_state.cost_template not in list_nganh_nghe:
-    st.session_state.cost_template = list_nganh_nghe[0] if list_nganh_nghe else ""
-    
 if "cost_items" not in st.session_state:
     st.session_state.cost_items = pd.DataFrame(columns=[
         "Nhóm chi phí", "Tên chi tiết", "Đơn vị", "Định mức", "Đơn giá", "Thành tiền"
@@ -145,7 +138,6 @@ def tao_bang_mau_theo_nganh(ten_nganh):
             "Thành tiền": 0
         })
     st.session_state.cost_items = pd.DataFrame(du_lieu_moi)
-    st.session_state.cost_template = ten_nganh
 
 # Tải dữ liệu Bảng Lịch sử Phân tích
 cols_Costing = ["Ngày", "Tên dự án", "Ngành nghề", "Quy mô", "Tổng Cost", "Giá bán", "Lợi nhuận", "Margin (%)", "Đánh giá", "Chi tiết BOM"]
@@ -171,7 +163,7 @@ def export_internal_analysis_pdf(summary_row, df_detail):
     pdf.ln(10)
 
     pdf.set_font(font_name, 'B', 16)
-    pdf.cell(0, 10, txt="PHIẾU PHÂN TÍCH TÀI CHÍNH & TÍNH KHẢ THI DỰ ÁN", ln=True, align='C')
+    pdf.cell(0, 10, txt="PHIẾU PHÂN TÍCH COST & TÍNH KHẢ THI DỰ ÁN", ln=True, align='C')
     pdf.ln(5)
     
     pdf.set_font(font_name, '', 11)
@@ -269,12 +261,13 @@ with tab_TinhCost:
         st.subheader("Bước 1: Chọn Ngành Nghề & Thiết Lập Dự Án")
         c_nganh, c_btn = st.columns([3, 1])
         if list_nganh_nghe:
-            nganh_chon = c_nganh.selectbox("Lĩnh vực kinh doanh / Loại dự án:", list_nganh_nghe, index=list_nganh_nghe.index(st.session_state.cost_template) if st.session_state.cost_template in list_nganh_nghe else 0)
+            # Dropdown chọn ngành nghề
+            nganh_chon = c_nganh.selectbox("Lĩnh vực kinh doanh / Loại dự án:", list_nganh_nghe, key="select_nganh")
         else:
             nganh_chon = ""
             c_nganh.error("Chưa có ngành nghề nào. Vui lòng sang Tab Cấu Hình để tạo!")
         
-        st.caption("💡 Mẹo: Bấm 'Tạo Bảng Tính Mẫu' để hệ thống gọi ra các loại chi phí tương ứng với ngành nghề này.")
+        st.caption("💡 Mẹo: Bấm 'Tạo Bảng Tính Mẫu' để hệ thống tự điền sẵn các dòng danh mục chuẩn cho ngành này.")
         if c_btn.button("✨ TẠO BẢNG TÍNH MẪU", use_container_width=True):
             if nganh_chon:
                 tao_bang_mau_theo_nganh(nganh_chon)
@@ -284,14 +277,14 @@ with tab_TinhCost:
         col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
         ten_du_an = col_info1.text_input("Tên Công việc / Sản phẩm cần phân tích:", placeholder="VD: Ly Cafe Sữa, Thiết kế tủ áo, Xây nhà cấp 4...")
         so_luong_lo = col_info2.number_input("Quy mô / Số lượng:", min_value=1, value=1, step=1, help="Nhập 1 nếu tính cho 1 sản phẩm, nhập 1000 nếu tính cho cả lô.")
-        gia_ban_du_kien = col_info3.number_input("Giá thu khách dự kiến (VNĐ):", min_value=0, step=1000)
+        gia_ban_du_kien = col_info3.number_input("Giá thu khách dự kiến (VNĐ):", min_value=0, step=1000, help="Giá bạn định thu của khách hoặc giá thị trường chung.")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("Bước 2: Điền Bảng Định Mức Trực Tiếp (BOM)")
-    st.info("Hãy điền vào Tên chi tiết, Định mức (Số lượng) và Đơn giá. Cuộn xuống dưới cùng để ấn nút '+' nếu cần thêm dòng.")
+    st.info("Danh sách xổ xuống ở cột 'Nhóm Phân Loại' đã được tự động cập nhật khớp hoàn toàn với ngành bạn vừa chọn ở trên.")
 
-    # Tự động lấy danh sách hạng mục của ngành đang chọn để làm Dropdown
-    current_categories = dynamic_templates.get(st.session_state.cost_template, ["Khác"])
+    # KHÓA CHẶT (BIND) DANH SÁCH DROPDOWN THEO ĐÚNG NGÀNH ĐANG CHỌN TẠI SELECTBOX
+    current_categories = dynamic_templates.get(nganh_chon, ["Khác"])
     if not current_categories:
         current_categories = ["Khác"]
     
@@ -302,7 +295,7 @@ with tab_TinhCost:
         column_config={
             "Nhóm chi phí": st.column_config.SelectboxColumn(
                 "Nhóm Phân Loại",
-                options=current_categories,
+                options=current_categories, # Cột này giờ đây linh hoạt đổi liền theo lựa chọn của bạn
                 required=True
             ),
             "Tên chi tiết": st.column_config.TextColumn("Tên chi tiết cụ thể", required=True),
@@ -376,7 +369,7 @@ with tab_TinhCost:
                 new_cost_record = {
                     "Ngày": datetime.today().strftime('%d/%m/%Y'),
                     "Tên dự án": ten_du_an,
-                    "Ngành nghề": st.session_state.cost_template,
+                    "Ngành nghề": nganh_chon,
                     "Quy mô": so_luong_lo,
                     "Tổng Cost": tong_cost,
                     "Giá bán": gia_ban_du_kien,
@@ -387,7 +380,8 @@ with tab_TinhCost:
                 }
                 append_data(new_cost_record, "wanchi_costing_v2", df_Costing)
             
-            tao_bang_mau_theo_nganh(st.session_state.cost_template)
+            # Reset lại form sau khi lưu
+            tao_bang_mau_theo_nganh(nganh_chon)
             st.success("✅ Đã cất kết quả vào tủ hồ sơ thành công! (Xem bên Tab Lịch Sử)")
             st.rerun()
 
@@ -420,8 +414,8 @@ with tab_LichSu:
     st.markdown("---")
     st.subheader("🔍 Xem Lại Chi Tiết & In Báo Cáo Nội Bộ")
     
-    list_du_an = df_Costing["Tên dự án"].dropna().unique().tolist() if not df_Costing.empty else []
-    chon_da = st.selectbox("Chọn dự án để mổ xẻ lại chi phí:", ["(Vui lòng chọn)"] + list_du_an)
+    list_du_an_ls = df_Costing["Tên dự án"].dropna().unique().tolist() if not df_Costing.empty else []
+    chon_da = st.selectbox("Chọn dự án để mổ xẻ lại chi phí:", ["(Vui lòng chọn)"] + list_du_an_ls)
     
     if chon_da != "(Vui lòng chọn)":
         row_info = df_Costing[df_Costing["Tên dự án"] == chon_da].iloc[0]
@@ -448,7 +442,7 @@ with tab_LichSu:
 # ------------------------------------------
 with tab_CauHinh:
     st.header("⚙️ Quản Lý Cấu Trúc Chi Phí Theo Ngành")
-    st.markdown("Vì mỗi ngành nghề sẽ thay đổi và phát sinh những chi phí mới theo thời gian. Tại đây, bạn có thể tự do **Sửa đổi/Thêm/Bớt** các hạng mục chi phí của các ngành hiện tại, hoặc **Tạo một ngành hoàn toàn mới**.")
+    st.markdown("Tại đây, bạn có thể tự do **Sửa đổi/Thêm/Bớt** các hạng mục chi phí của các ngành hiện tại, hoặc **Tạo một ngành hoàn toàn mới**.")
     
     c_edit, c_add = st.columns([2, 1])
     
@@ -466,11 +460,9 @@ with tab_CauHinh:
             
             if st.button(f"💾 Cập nhật lưu lại cho ngành {nganh_sua}"):
                 with st.spinner("Đang cập nhật lên máy chủ..."):
-                    # Loại bỏ các dòng rỗng
                     list_moi = edited_danhmuc["Các hạng mục chi phí"].dropna().tolist()
                     list_moi = [str(x).strip() for x in list_moi if str(x).strip() != ""]
                     
-                    # Tìm index và cập nhật dataframe tổng
                     idx = df_templates.index[df_templates['Tên ngành nghề'] == nganh_sua].tolist()[0]
                     df_templates.at[idx, 'Danh sách chi phí'] = json.dumps(list_moi, ensure_ascii=False)
                     
@@ -490,7 +482,6 @@ with tab_CauHinh:
                 st.error("Tên ngành này đã tồn tại!")
             else:
                 with st.spinner("Đang tạo..."):
-                    # Tạo sẵn một vài hạng mục cơ bản
                     hang_muc_co_ban = ["Vật liệu chính", "Chi phí nhân công", "Chi phí khác"]
                     new_template = {
                         "Tên ngành nghề": ten_nganh_moi,
