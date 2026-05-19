@@ -88,7 +88,7 @@ cols_Weights = ["Ngày", "Khách hàng", "Tên sản phẩm", "Loại nhựa", "
 df_Weights = load_data("wanchi_weights", cols_Weights)
 df_Weights = df_Weights.loc[:, ~df_Weights.columns.duplicated()]
 
-# ---> CẬP NHẬT CẤU TRÚC CỘT MỚI: BỎ CỘT TÊN, THÊM CỘT SỐ LƯỢNG <---
+# ---> CẤU TRÚC CỘT: KHÔNG CÓ CỘT TÊN, CÓ CỘT SỐ LƯỢNG <---
 expected_cols = ["Dài (mm)", "Rộng (mm)", "Dày (mm)", "Số lượng", "Thể tích (cm3)", "Trọng lượng (gram)"]
 if "weight_items" not in st.session_state or list(st.session_state.weight_items.columns) != expected_cols:
     st.session_state.weight_items = pd.DataFrame(columns=expected_cols)
@@ -132,7 +132,7 @@ with tab_TinhToan:
         st.session_state.weight_items,
         num_rows="dynamic",
         use_container_width=True,
-        hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
+        hide_index=True, # ---> ĐÃ ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
         column_config={
             "Dài (mm)": st.column_config.NumberColumn("Dài (mm)", min_value=0.0, format="%.2f"),
             "Rộng (mm)": st.column_config.NumberColumn("Rộng (mm)", min_value=0.0, format="%.2f"),
@@ -181,7 +181,7 @@ with tab_TinhToan:
 
     with c_kq2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Lưu Váo Lịch Sử Tính Toán", use_container_width=True):
+        if st.button("💾 Lưu Vào Lịch Sử Tính Toán", use_container_width=True):
             if not ten_sp:
                 st.error("⚠️ Vui lòng nhập ít nhất Tên sản phẩm!")
             elif tong_trong_luong == 0:
@@ -219,7 +219,7 @@ with tab_LichSu:
         df_Weights,
         num_rows="dynamic",
         use_container_width=True,
-        hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
+        hide_index=True, # ---> ĐÃ ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
         column_config={
             "Chi tiết khối": None, 
             "Tỉ trọng": st.column_config.NumberColumn(format="%.2f"),
@@ -246,7 +246,7 @@ with tab_LichSu:
         
         try:
             df_chitiet = pd.read_json(row_info["Chi tiết khối"])
-            st.dataframe(df_chitiet, use_container_width=True, hide_index=True) # Ẩn cột số thứ tự cho bảng xem lại
+            st.dataframe(df_chitiet, use_container_width=True, hide_index=True) # ---> ĐÃ ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
         except Exception as e:
             st.error("Lỗi khi đọc dữ liệu chi tiết của sản phẩm này.")
 
@@ -266,8 +266,8 @@ with tab_CauHinh:
         edited_plastics = st.data_editor(
             df_plastics, 
             num_rows="dynamic", 
-            use_container_width=True,
-            hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
+            use_container_width=True, 
+            hide_index=True, # ---> ĐÃ ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
             key="edit_plastics",
             column_config={
                 "Tên nhựa": st.column_config.TextColumn("Tên nhựa (VD: Nhựa PET, Nhựa PA)"),
