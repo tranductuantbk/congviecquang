@@ -1,7 +1,7 @@
 import streamlit as st
 
 # 1. Cấu hình trang phải nằm trên cùng
-st.set_page_config(page_title="Hệ Thống WANCHI", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Hệ Thống Quang", layout="wide", initial_sidebar_state="expanded")
 
 # 2. Khởi tạo bộ nhớ đăng nhập
 if "logged_in" not in st.session_state:
