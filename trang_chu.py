@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.set_page_config(page_title="Hệ Thống WANCHI", layout="centered")
+st.set_page_config(page_title="Hệ Thống Quang", layout="centered")
 
 # Khởi tạo bộ nhớ đăng nhập
 if "logged_in" not in st.session_state:
@@ -31,7 +31,7 @@ if not st.session_state.logged_in:
 
 # --- NẾU ĐÃ ĐĂNG NHẬP: HIỆN TRANG CHỦ VÀ MENU ---
 else:
-    st.title("🏭 CHÀO MỪNG ĐẾN VỚI WANCHI")
+    st.title("🏭 CHÀO MỪNG QUANG")
     st.write("---")
     st.success("✅ Đăng nhập thành công!")
     st.info("👈 Thanh Menu bên trái đã được mở khóa. Bạn hãy click vào Menu góc trên cùng bên trái để chọn Module làm việc nhé!")
