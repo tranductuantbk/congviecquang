@@ -88,8 +88,8 @@ cols_Weights = ["Ngày", "Khách hàng", "Tên sản phẩm", "Loại nhựa", "
 df_Weights = load_data("wanchi_weights", cols_Weights)
 df_Weights = df_Weights.loc[:, ~df_Weights.columns.duplicated()]
 
-# ---> BẢN VÁ LỖI BỘ NHỚ TẠM (SESSION STATE) <---
-expected_cols = ["Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)", "Thể tích (cm3)", "Trọng lượng (gram)"]
+# ---> CẬP NHẬT CẤU TRÚC CỘT MỚI: BỎ CỘT TÊN, THÊM CỘT SỐ LƯỢNG <---
+expected_cols = ["Dài (mm)", "Rộng (mm)", "Dày (mm)", "Số lượng", "Thể tích (cm3)", "Trọng lượng (gram)"]
 if "weight_items" not in st.session_state or list(st.session_state.weight_items.columns) != expected_cols:
     st.session_state.weight_items = pd.DataFrame(columns=expected_cols)
 
@@ -97,7 +97,7 @@ if "weight_items" not in st.session_state or list(st.session_state.weight_items.
 # GIAO DIỆN CHÍNH
 # ==========================================
 st.title("⚖️ Công Cụ Tính Trọng Lượng Nhựa (Công Thức Chuẩn)")
-st.markdown("Áp dụng công thức: **Thể tích (cm³)** = (Dài × Rộng × Dày) / 1000. **Trọng lượng (g)** = Thể tích × Tỉ trọng.")
+st.markdown("Áp dụng công thức: **Thể tích (cm³)** = (Dài × Rộng × Dày × Số lượng) / 1000. **Trọng lượng (g)** = Thể tích × Tỉ trọng.")
 st.markdown("---")
 
 tab_TinhToan, tab_LichSu, tab_CauHinh = st.tabs(["🧩 NHẬP KÍCH THƯỚC & TÍNH TOÁN", "🗂️ LỊCH SỬ ĐÃ TÍNH", "⚙️ CẤU HÌNH TỈ TRỌNG NHỰA"])
@@ -126,17 +126,17 @@ with tab_TinhToan:
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("2. Khai báo Kích thước (Máy tự tính Dấu +)")
-    st.info("💡 Hướng dẫn: Gõ xong Dài, Rộng, Dày rồi bấm Enter. Hệ thống sẽ tự nảy số. Ấn biểu tượng '+' cuối bảng để thêm bao nhiêu chi tiết tùy thích.")
+    st.info("💡 Hướng dẫn: Gõ Dài, Rộng, Dày và Số lượng rồi bấm Enter. Hệ thống sẽ tự nảy số. Ấn biểu tượng '+' cuối bảng để thêm nhiều khối.")
     
     edited_weight_df = st.data_editor(
         st.session_state.weight_items,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Khu vực / Tên chi tiết": st.column_config.TextColumn("Khu vực / Tên chi tiết"),
             "Dài (mm)": st.column_config.NumberColumn("Dài (mm)", min_value=0.0, format="%.2f"),
             "Rộng (mm)": st.column_config.NumberColumn("Rộng (mm)", min_value=0.0, format="%.2f"),
             "Dày (mm)": st.column_config.NumberColumn("Dày (mm)", min_value=0.0, format="%.2f"),
+            "Số lượng": st.column_config.NumberColumn("Số lượng", min_value=1, format="%d"),
             "Thể tích (cm3)": st.column_config.NumberColumn("Thể tích (cm3)", disabled=True, format="%.3f"),
             "Trọng lượng (gram)": st.column_config.NumberColumn("Trọng lượng (gram)", disabled=True, format="%.2f")
         },
@@ -150,14 +150,18 @@ with tab_TinhToan:
         edited_weight_df["Rộng (mm)"] = pd.to_numeric(edited_weight_df["Rộng (mm)"], errors="coerce").fillna(0.0)
         edited_weight_df["Dày (mm)"] = pd.to_numeric(edited_weight_df["Dày (mm)"], errors="coerce").fillna(0.0)
         
-        # ÁP DỤNG CÔNG THỨC CHUẨN
-        edited_weight_df["Thể tích (cm3)"] = (edited_weight_df["Dài (mm)"] * edited_weight_df["Rộng (mm)"] * edited_weight_df["Dày (mm)"]) / 1000.0
+        # Mặc định Số lượng là 1 nếu bỏ trống
+        edited_weight_df["Số lượng"] = pd.to_numeric(edited_weight_df["Số lượng"], errors="coerce").fillna(1)
+        edited_weight_df.loc[edited_weight_df["Số lượng"] <= 0, "Số lượng"] = 1
+        
+        # ÁP DỤNG CÔNG THỨC CHUẨN CÓ SỐ LƯỢNG
+        edited_weight_df["Thể tích (cm3)"] = (edited_weight_df["Dài (mm)"] * edited_weight_df["Rộng (mm)"] * edited_weight_df["Dày (mm)"] * edited_weight_df["Số lượng"]) / 1000.0
         edited_weight_df["Trọng lượng (gram)"] = edited_weight_df["Thể tích (cm3)"] * ti_trong_hien_tai
         
         tong_trong_luong = edited_weight_df["Trọng lượng (gram)"].sum()
         
-        # ---> LỚP BẢO VỆ CHỐNG LỖI KEYERROR KHI AUTO-RERUN <---
-        input_cols = ["Khu vực / Tên chi tiết", "Dài (mm)", "Rộng (mm)", "Dày (mm)"]
+        # LỚP BẢO VỆ CHỐNG LỖI KHI AUTO-RERUN
+        input_cols = ["Dài (mm)", "Rộng (mm)", "Dày (mm)", "Số lượng"]
         if all(c in edited_weight_df.columns for c in input_cols) and all(c in st.session_state.weight_items.columns for c in input_cols):
             if not edited_weight_df[input_cols].equals(st.session_state.weight_items[input_cols]):
                 st.session_state.weight_items = edited_weight_df.copy()
