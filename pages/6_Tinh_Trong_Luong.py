@@ -132,6 +132,7 @@ with tab_TinhToan:
         st.session_state.weight_items,
         num_rows="dynamic",
         use_container_width=True,
+        hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
         column_config={
             "Dài (mm)": st.column_config.NumberColumn("Dài (mm)", min_value=0.0, format="%.2f"),
             "Rộng (mm)": st.column_config.NumberColumn("Rộng (mm)", min_value=0.0, format="%.2f"),
@@ -218,6 +219,7 @@ with tab_LichSu:
         df_Weights,
         num_rows="dynamic",
         use_container_width=True,
+        hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
         column_config={
             "Chi tiết khối": None, 
             "Tỉ trọng": st.column_config.NumberColumn(format="%.2f"),
@@ -244,7 +246,7 @@ with tab_LichSu:
         
         try:
             df_chitiet = pd.read_json(row_info["Chi tiết khối"])
-            st.dataframe(df_chitiet, use_container_width=True)
+            st.dataframe(df_chitiet, use_container_width=True, hide_index=True) # Ẩn cột số thứ tự cho bảng xem lại
         except Exception as e:
             st.error("Lỗi khi đọc dữ liệu chi tiết của sản phẩm này.")
 
@@ -264,7 +266,8 @@ with tab_CauHinh:
         edited_plastics = st.data_editor(
             df_plastics, 
             num_rows="dynamic", 
-            use_container_width=True, 
+            use_container_width=True,
+            hide_index=True,  # ---> ẨN CỘT SỐ THỨ TỰ BÊN TRÁI <---
             key="edit_plastics",
             column_config={
                 "Tên nhựa": st.column_config.TextColumn("Tên nhựa (VD: Nhựa PET, Nhựa PA)"),
