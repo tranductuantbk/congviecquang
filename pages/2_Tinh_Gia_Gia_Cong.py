@@ -36,7 +36,7 @@ def save_data_gc(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Hệ số ĐL", "Hệ số TC", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
     except Exception: pass
 
@@ -56,6 +56,11 @@ if "confirm_delete_idx_gc" not in st.session_state:
 if "is_editing_gc" not in st.session_state:
     st.session_state["is_editing_gc"] = False
     st.session_state["edit_index_gc"] = None
+
+if "original_ma_sp_gc" not in st.session_state:
+    st.session_state["original_ma_sp_gc"] = ""
+if "original_ten_sp_gc" not in st.session_state:
+    st.session_state["original_ten_sp_gc"] = ""
 
 danh_sach_tabs = ["🧮 1. TÍNH TOÁN & NHẬP LIỆU", "📋 2. DANH SÁCH GIA CÔNG", "⚖️ 3. ĐỊNH LƯỢNG SẢN PHẨM"]
 
@@ -92,6 +97,8 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM GIA CÔNG**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state["is_editing_gc"] = False
+            st.session_state["original_ma_sp_gc"] = ""
+            st.session_state["original_ten_sp_gc"] = ""
             st.rerun()
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM GIA CÔNG")
@@ -147,8 +154,7 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
-        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("gc_hs_tc_in", 0.6), min_value=0.01, step=0.01, key="gc_hs_tc_in_ui")
-        gia_cong_ty = gia_dai_ly / hs_tc
+        gia_cong_ty = gia_dai_ly / 0.55
         st.metric(label="Giá Công ty", value=f"{round(gia_cong_ty):,} VNĐ")
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
@@ -158,19 +164,29 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 new_data = {
                     "Mã SP": ma_sp, "Tên Sản Phẩm": ten_sp, "Trọng lượng": trong_luong, "Đơn giá nhựa": gia_nhua,
                     "Giá máy": gia_may_ca, "Chu kỳ": chu_ky, "SP Khuôn": sp_khuon, "Bao bì": bao_bi, "Phụ kiện": phu_kien,
-                    "Đơn giá phụ gia": don_gia_phu_gia, "Tỉ lệ phụ gia": ti_le_phu_gia, "Hệ số ĐL": hs_dl, "Hệ số TC": hs_tc,
+                    "Đơn giá phụ gia": don_gia_phu_gia, "Tỉ lệ phụ gia": ti_le_phu_gia, "Hệ số ĐL": hs_dl,
                     "Giá Vốn": round(gvhb), "Giá Đại Lý": round(gia_dai_ly), "Giá Công ty": round(gia_cong_ty)
                 }
                 
                 if st.session_state["is_editing_gc"]:
-                    st.session_state["danh_sach_gc"][st.session_state["edit_index_gc"]] = new_data
+                    old_ma = st.session_state.get("original_ma_sp_gc", "")
+                    old_ten = st.session_state.get("original_ten_sp_gc", "")
+                    
+                    if ma_sp == old_ma and ten_sp == old_ten:
+                        st.session_state["danh_sach_gc"][st.session_state["edit_index_gc"]] = new_data
+                        st.session_state["gc_success_msg"] = f"✅ Đã CẬP NHẬT thông số cho sản phẩm gia công '{ten_sp}'! Dữ liệu vẫn giữ nguyên, bạn có thể tạo mã mới."
+                    else:
+                        st.session_state["danh_sach_gc"].append(new_data)
+                        st.session_state["gc_success_msg"] = f"✅ Đã TẠO MỚI sản phẩm gia công '{ten_sp}' thành công từ bản sao gốc!"
+                    
                     st.session_state["is_editing_gc"] = False
+                    st.session_state["original_ma_sp_gc"] = ""
+                    st.session_state["original_ten_sp_gc"] = ""
                 else:
                     st.session_state["danh_sach_gc"].append(new_data)
+                    st.session_state["gc_success_msg"] = f"✅ Đã lưu sản phẩm gia công mới '{ten_sp}' thành công! Dữ liệu vẫn giữ nguyên, bạn có thể nhập tiếp."
                 
                 save_data_gc(st.session_state["danh_sach_gc"])
-                
-                st.session_state["gc_success_msg"] = f"✅ Đã lưu sản phẩm gia công '{ten_sp}' thành công! Bạn có thể nhập tiếp sản phẩm mới."
                 st.rerun()
 
 # ==========================================
@@ -194,21 +210,39 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
             df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
             
         cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"]
-        st.dataframe(df[[c for c in cols_to_show if c in df.columns]], use_container_width=True)
+        df_display = df[[c for c in cols_to_show if c in df.columns]].copy()
+        
+        # THÊM CỘT CHECKBOX ĐỂ CHỌN TRỰC TIẾP TỪ BẢNG
+        df_display.insert(0, "Chọn", False)
+        
+        st.markdown("👉 **Đánh dấu tích (✓) vào ô 'Chọn' trong bảng dưới đây để thao tác:**")
+        edited_df = st.data_editor(
+            df_display,
+            hide_index=True,
+            use_container_width=True,
+            disabled=cols_to_show # Khóa các cột dữ liệu, chỉ cho phép bấm cột Chọn
+        )
+        
+        # Lấy danh sách các dòng được chọn
+        selected_indices = edited_df[edited_df["Chọn"]].index.tolist()
         
         st.markdown("---")
-        st.markdown("**Quản lý:**")
-        col1, col2 = st.columns([2, 1])
         
-        with col1:
-            ten_sp_chon = st.selectbox("Chọn sản phẩm:", [sp["Tên Sản Phẩm"] for sp in st.session_state["danh_sach_gc"]])
-            idx = next(i for i, sp in enumerate(st.session_state["danh_sach_gc"]) if sp["Tên Sản Phẩm"] == ten_sp_chon)
+        if len(selected_indices) == 0:
+            st.info("💡 Vui lòng tích chọn sản phẩm trên bảng để Chỉnh sửa hoặc Xóa.")
+            
+        elif len(selected_indices) == 1:
+            idx = selected_indices[0]
+            sp = st.session_state["danh_sach_gc"][idx]
+            
+            st.write(f"Đang chọn: **{sp.get('Tên Sản Phẩm', 'Sản phẩm')}**")
             
             c_btn1, c_btn2 = st.columns(2)
-            if c_btn1.button("✏️ Chỉnh sửa", use_container_width=True):
-                sp = st.session_state["danh_sach_gc"][idx]
-                
-                # Bơm dữ liệu vào bộ nhớ
+            if c_btn1.button("✏️ Chỉnh sửa sản phẩm này", use_container_width=True):
+                # Lưu thông tin Gốc để so sánh sau khi chỉnh sửa
+                st.session_state["original_ma_sp_gc"] = sp.get("Mã SP", "")
+                st.session_state["original_ten_sp_gc"] = sp.get("Tên Sản Phẩm", "")
+            
                 st.session_state["gc_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["gc_ten_in"] = sp.get("Tên Sản Phẩm", "")
                 st.session_state["gc_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
@@ -221,21 +255,17 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                 st.session_state["gc_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
                 st.session_state["gc_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
                 st.session_state["gc_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
-                st.session_state["gc_hs_tc_in"] = float(sp.get("Hệ số TC", 0.6))
                 
                 st.session_state["is_editing_gc"] = True
                 st.session_state["edit_index_gc"] = idx
-                
-                # Kích hoạt lệnh nhảy Tab
                 st.session_state["current_tab_gc"] = danh_sach_tabs[0]
                 st.rerun()
                 
-            if c_btn2.button("🗑️ Xóa", use_container_width=True):
+            if c_btn2.button("🗑️ Xóa sản phẩm này", use_container_width=True):
                 st.session_state["confirm_delete_idx_gc"] = idx
                 
-            # --- HIỆN HỘP THOẠI XÁC NHẬN ---
             if st.session_state.get("confirm_delete_idx_gc") == idx:
-                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{st.session_state['danh_sach_gc'][idx]['Tên Sản Phẩm']}** không?")
+                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{sp.get('Tên Sản Phẩm', '')}** không?")
                 col_yes, col_no = st.columns(2)
                 if col_yes.button("✔️ Đồng ý xóa", use_container_width=True, key=f"yes_del_gc"):
                     st.session_state["danh_sach_gc"].pop(idx)
@@ -246,8 +276,24 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                     st.session_state["confirm_delete_idx_gc"] = None
                     st.rerun()
                     
-        with col2:
-            st.write("") 
+        else:
+            st.write(f"Đang chọn **{len(selected_indices)}** sản phẩm.")
+            if st.button("🗑️ Xóa TẤT CẢ sản phẩm đã chọn", use_container_width=True):
+                 st.session_state["confirm_delete_multi_gc"] = selected_indices
+                 
+            if st.session_state.get("confirm_delete_multi_gc") == selected_indices:
+                st.error("⚠️ Bạn có chắc chắn muốn xóa TẤT CẢ các sản phẩm đã chọn không?")
+                col_yes, col_no = st.columns(2)
+                if col_yes.button("✔️ Đồng ý xóa tất cả", use_container_width=True, key="yes_del_multi_gc"):
+                    # Xóa theo index từ cao xuống thấp để không bị lệch danh sách
+                    for i in sorted(selected_indices, reverse=True):
+                        st.session_state["danh_sach_gc"].pop(i)
+                    save_data_gc(st.session_state["danh_sach_gc"])
+                    st.session_state["confirm_delete_multi_gc"] = None
+                    st.rerun()
+                if col_no.button("❌ Hủy", use_container_width=True, key="no_del_multi_gc"):
+                    st.session_state["confirm_delete_multi_gc"] = None
+                    st.rerun()
     else:
         st.info("Chưa có dữ liệu.")
 
