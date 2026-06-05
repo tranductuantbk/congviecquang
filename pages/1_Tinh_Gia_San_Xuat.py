@@ -27,9 +27,12 @@ def load_data():
         if not inspector.has_table("wanchi_sanpham"):
             return []
         df = pd.read_sql("SELECT * FROM wanchi_sanpham", con=conn.engine)
-        return df.to_dict('records') if not df.empty else []
+        if not df.empty:
+            if "Giá Tiêu Chuẩn" in df.columns:
+                df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
+            return df.to_dict('records')
+        return []
     except Exception as e:
-        # Xử lý lỗi Cold Start của Neon DB
         st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
         return None
 
@@ -37,7 +40,7 @@ def save_data(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Hệ số TC", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
     except Exception as e:
         pass
@@ -48,7 +51,6 @@ def save_data(data_list):
 if "danh_sach_sp" not in st.session_state or st.session_state["danh_sach_sp"] is None:
     st.session_state["danh_sach_sp"] = load_data()
 
-# Cứu cánh an toàn nếu DB chưa lên
 if st.session_state["danh_sach_sp"] is None:
     st.session_state["danh_sach_sp"] = []
 
@@ -168,9 +170,8 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         gia_dai_ly = gvhb / hs_dl
         st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
 
-        hs_tc = st.number_input("Hệ số LN TC", value=st.session_state.get("sx_hs_tc_in", 0.55), min_value=0.01, step=0.01, key="sx_hs_tc_in_ui")
-        gia_cong_ty = gia_dai_ly / hs_tc
-        st.metric(label="Giá Công ty", value=f"{round(gia_cong_ty):,} VNĐ")
+        gia_cong_ty = gia_dai_ly / 0.55
+        st.metric(label="Giá Công ty (Mặc định: Giá ĐL / 0.55)", value=f"{round(gia_cong_ty):,} VNĐ")
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
@@ -191,7 +192,6 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                     "Giá trị khuôn": gia_tri_khuon,
                     "SL khuôn": sl_khuon_sx,
                     "Hệ số ĐL": hs_dl,
-                    "Hệ số TC": hs_tc,
                     "Giá Vốn": round(gvhb),
                     "Giá Đại Lý": round(gia_dai_ly),
                     "Giá Công ty": round(gia_cong_ty)
@@ -229,21 +229,35 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
         if "Giá Tiêu Chuẩn" in df.columns and "Giá Công ty" not in df.columns:
             df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
             
-        df_display = df[[c for c in cols_to_show if c in df.columns]]
-        st.dataframe(df_display, use_container_width=True)
+        df_display = df[[c for c in cols_to_show if c in df.columns]].copy()
+        
+        # THÊM CỘT CHECKBOX ĐỂ CHỌN TRỰC TIẾP TỪ BẢNG
+        df_display.insert(0, "Chọn", False)
+        
+        st.markdown("👉 **Đánh dấu tích (✓) vào ô 'Chọn' trong bảng dưới đây để thao tác:**")
+        edited_df = st.data_editor(
+            df_display,
+            hide_index=True,
+            use_container_width=True,
+            disabled=cols_to_show # Khóa các cột dữ liệu, chỉ cho phép bấm cột Chọn
+        )
+        
+        # Lấy danh sách các dòng được chọn
+        selected_indices = edited_df[edited_df["Chọn"]].index.tolist()
         
         st.markdown("---")
-        st.markdown("**Quản lý:**")
-        col1, col2 = st.columns(2)
         
-        with col1:
-            ten_sp_chon = st.selectbox("Chọn sản phẩm:", [sp["Tên Sản Phẩm"] for sp in st.session_state["danh_sach_sp"]])
-            idx = next(i for i, sp in enumerate(st.session_state["danh_sach_sp"]) if sp["Tên Sản Phẩm"] == ten_sp_chon)
+        if len(selected_indices) == 0:
+            st.info("💡 Vui lòng tích chọn sản phẩm trên bảng để Chỉnh sửa hoặc Xóa.")
+            
+        elif len(selected_indices) == 1:
+            idx = selected_indices[0]
+            sp = st.session_state["danh_sach_sp"][idx]
+            
+            st.write(f"Đang chọn: **{sp.get('Tên Sản Phẩm', 'Sản phẩm')}**")
             
             c_btn1, c_btn2 = st.columns(2)
-            if c_btn1.button("✏️ Chỉnh sửa", use_container_width=True):
-                sp = st.session_state["danh_sach_sp"][idx]
-                
+            if c_btn1.button("✏️ Chỉnh sửa sản phẩm này", use_container_width=True):
                 st.session_state["sx_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["sx_ten_in"] = sp.get("Tên Sản Phẩm", "")
                 st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
@@ -258,18 +272,17 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                 st.session_state["sx_gia_khuon_in"] = int(sp.get("Giá trị khuôn", 0))
                 st.session_state["sx_sl_khuon_in"] = int(sp.get("SL khuôn", 10000))
                 st.session_state["sx_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
-                st.session_state["sx_hs_tc_in"] = float(sp.get("Hệ số TC", 0.55))
                 
                 st.session_state["is_editing_sx"] = True
                 st.session_state["edit_index_sx"] = idx
                 st.session_state["current_tab_sx"] = danh_sach_tabs[0]
                 st.rerun()
                 
-            if c_btn2.button("🗑️ Xóa", use_container_width=True):
+            if c_btn2.button("🗑️ Xóa sản phẩm này", use_container_width=True):
                 st.session_state["confirm_delete_idx_sx"] = idx
                 
             if st.session_state.get("confirm_delete_idx_sx") == idx:
-                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{st.session_state['danh_sach_sp'][idx]['Tên Sản Phẩm']}** không?")
+                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa sản phẩm **{sp.get('Tên Sản Phẩm', '')}** không?")
                 col_yes, col_no = st.columns(2)
                 if col_yes.button("✔️ Đồng ý xóa", use_container_width=True, key=f"yes_del_sx"):
                     st.session_state["danh_sach_sp"].pop(idx)
@@ -278,6 +291,25 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                     st.rerun()
                 if col_no.button("❌ Hủy", use_container_width=True, key=f"no_del_sx"):
                     st.session_state["confirm_delete_idx_sx"] = None
+                    st.rerun()
+                    
+        else:
+            st.write(f"Đang chọn **{len(selected_indices)}** sản phẩm.")
+            if st.button("🗑️ Xóa TẤT CẢ sản phẩm đã chọn", use_container_width=True):
+                 st.session_state["confirm_delete_multi_sx"] = selected_indices
+                 
+            if st.session_state.get("confirm_delete_multi_sx") == selected_indices:
+                st.error("⚠️ Bạn có chắc chắn muốn xóa TẤT CẢ các sản phẩm đã chọn không?")
+                col_yes, col_no = st.columns(2)
+                if col_yes.button("✔️ Đồng ý xóa tất cả", use_container_width=True, key="yes_del_multi"):
+                    # Xóa theo index từ cao xuống thấp để không bị lệch danh sách
+                    for i in sorted(selected_indices, reverse=True):
+                        st.session_state["danh_sach_sp"].pop(i)
+                    save_data(st.session_state["danh_sach_sp"])
+                    st.session_state["confirm_delete_multi_sx"] = None
+                    st.rerun()
+                if col_no.button("❌ Hủy", use_container_width=True, key="no_del_multi"):
+                    st.session_state["confirm_delete_multi_sx"] = None
                     st.rerun()
     else:
         st.info("Chưa có dữ liệu.")
@@ -334,9 +366,8 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
         gia_dl_bo = gvhb_bo / hs_dl_bo
         st.metric(label="Giá Đại lý Bộ", value=f"{round(gia_dl_bo):,} VNĐ")
 
-        hs_tc_bo = st.number_input("Hệ số LN TC (Bộ)", min_value=0.01, max_value=1.0, value=0.6, step=0.01, key="hs_tc_bo")
-        gia_cong_ty_bo = gia_dl_bo / hs_tc_bo
-        st.metric(label="Giá Công ty Bộ", value=f"{round(gia_cong_ty_bo):,} VNĐ")
+        gia_tc_bo = gia_dl_bo / 0.55
+        st.metric(label="Giá Công ty Bộ (Mặc định: Giá ĐL / 0.55)", value=f"{round(gia_tc_bo):,} VNĐ")
         
         st.write("---")
         st.markdown("**Phân tích giá thành bộ:**")
@@ -359,7 +390,7 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                     "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g",
                     "Giá Vốn": round(gvhb_bo),
                     "Giá Đại Lý": round(gia_dl_bo),
-                    "Giá Công ty": round(gia_cong_ty_bo)
+                    "Giá Công ty": round(gia_tc_bo)
                 }
                 st.session_state["danh_sach_sp"].append(san_pham_moi_bo)
                 save_data(st.session_state["danh_sach_sp"])
