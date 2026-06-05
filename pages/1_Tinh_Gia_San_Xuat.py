@@ -57,6 +57,12 @@ if st.session_state["danh_sach_sp"] is None:
 if "is_editing_sx" not in st.session_state:
     st.session_state["is_editing_sx"] = False
     st.session_state["edit_index_sx"] = None
+    
+# Thêm biến nhớ dữ liệu gốc để kiểm tra khi lưu
+if "original_ma_sp" not in st.session_state:
+    st.session_state["original_ma_sp"] = ""
+if "original_ten_sp" not in st.session_state:
+    st.session_state["original_ten_sp"] = ""
 
 if "confirm_delete_idx_sx" not in st.session_state:
     st.session_state["confirm_delete_idx_sx"] = None
@@ -97,6 +103,9 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.info("✨ **ĐANG TRONG CHẾ ĐỘ CHỈNH SỬA SẢN PHẨM**")
         if st.button("❌ Hủy chỉnh sửa / Thêm mới"):
             st.session_state["is_editing_sx"] = False
+            # Dọn dẹp biến gốc
+            st.session_state["original_ma_sp"] = ""
+            st.session_state["original_ten_sp"] = ""
             st.rerun()
 
     st.subheader("📝 THÔNG TIN SẢN PHẨM")
@@ -197,15 +206,32 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                     "Giá Công ty": round(gia_cong_ty)
                 }
                 
+                # --- LOGIC XỬ LÝ LƯU THÔNG MINH ---
                 if st.session_state["is_editing_sx"]:
-                    st.session_state["danh_sach_sp"][st.session_state["edit_index_sx"]] = new_data
+                    old_ma = st.session_state.get("original_ma_sp", "")
+                    old_ten = st.session_state.get("original_ten_sp", "")
+                    
+                    # KIỂM TRA: Nếu y xì cả tên và mã -> Cập nhật sản phẩm cũ
+                    if ma_sp == old_ma and ten_sp == old_ten:
+                        st.session_state["danh_sach_sp"][st.session_state["edit_index_sx"]] = new_data
+                        st.session_state["sx_success_msg"] = f"✅ Đã CẬP NHẬT thông số cho sản phẩm '{ten_sp}'! Dữ liệu vẫn giữ nguyên, bạn có thể tạo mã mới."
+                    # KIỂM TRA: Có thay đổi tên hoặc mã -> Lưu thành sản phẩm mới hoàn toàn
+                    else:
+                        st.session_state["danh_sach_sp"].append(new_data)
+                        st.session_state["sx_success_msg"] = f"✅ Đã TẠO MỚI sản phẩm '{ten_sp}' thành công từ bản sao gốc!"
+                    
+                    # Thoát chế độ sửa
                     st.session_state["is_editing_sx"] = False
+                    st.session_state["original_ma_sp"] = ""
+                    st.session_state["original_ten_sp"] = ""
+                    
                 else:
+                    # Chế độ thêm mới bình thường
                     st.session_state["danh_sach_sp"].append(new_data)
+                    st.session_state["sx_success_msg"] = f"✅ Đã lưu sản phẩm mới '{ten_sp}' thành công! Dữ liệu vẫn giữ nguyên, bạn có thể nhập tiếp."
                 
+                # Lưu đồng bộ lên đám mây
                 save_data(st.session_state["danh_sach_sp"])
-                
-                st.session_state["sx_success_msg"] = f"✅ Đã lưu sản phẩm '{ten_sp}' thành công! Bạn có thể nhập tiếp sản phẩm mới."
                 st.rerun()
 
 # ==========================================
@@ -258,6 +284,10 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
             
             c_btn1, c_btn2 = st.columns(2)
             if c_btn1.button("✏️ Chỉnh sửa sản phẩm này", use_container_width=True):
+                # Lưu thông tin Gốc để so sánh sau khi chỉnh sửa
+                st.session_state["original_ma_sp"] = sp.get("Mã SP", "")
+                st.session_state["original_ten_sp"] = sp.get("Tên Sản Phẩm", "")
+            
                 st.session_state["sx_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["sx_ten_in"] = sp.get("Tên Sản Phẩm", "")
                 st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
