@@ -40,7 +40,7 @@ def save_data(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Chi phí đóng gói", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
     except Exception as e:
         pass
@@ -136,6 +136,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC & KHẤU HAO", expanded=True):
             bao_bi = st.number_input("Bao bì (VNĐ/SP)", value=st.session_state.get("sx_bao_bi_in", 10), key="sx_bao_bi_in_ui")
             phu_kien = st.number_input("Phụ kiện (VNĐ/SP)", value=st.session_state.get("sx_phu_kien_in", 100), key="sx_phu_kien_in_ui")
+            chi_phi_dong_goi = st.number_input("Chi phí đóng gói (VNĐ/SP)", value=st.session_state.get("sx_cp_dong_goi_in", 0), key="sx_cp_dong_goi_in_ui")
             
             st.markdown("**Tính Phụ gia:**")
             c_pg1, c_pg2 = st.columns(2)
@@ -149,7 +150,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
             sl_khuon_sx = ck2.number_input("SL khuôn sản xuất (Cái)", value=st.session_state.get("sx_sl_khuon_in", 10000), min_value=1, key="sx_sl_khuon_in_ui")
             khau_hao = gia_tri_khuon / sl_khuon_sx if sl_khuon_sx > 0 else 0
             
-            cp_khac_no_kh = bao_bi + phu_kien + phu_gia
+            cp_khac_no_kh = bao_bi + phu_kien + chi_phi_dong_goi + phu_gia
             cp_khac = cp_khac_no_kh + khau_hao
 
     gvhb = cp_nvl_1sp + cp_may_1sp + cp_khac
@@ -160,7 +161,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
             "Thành phần cấu tạo": [
                 "1. Nguyên vật liệu", 
                 "2. Máy sản xuất", 
-                "3. Chi phí khác (Bao bì, PK, Phụ gia)", 
+                "3. Chi phí khác (Bao bì, PK, Đóng gói, Phụ gia)", 
                 "4. Khấu hao khuôn", 
                 "TỔNG GIÁ VỐN (GVHB)"
             ],
@@ -196,6 +197,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                     "SP Khuôn": sp_khuon,
                     "Bao bì": bao_bi,
                     "Phụ kiện": phu_kien,
+                    "Chi phí đóng gói": chi_phi_dong_goi,
                     "Đơn giá phụ gia": don_gia_phu_gia,
                     "Tỉ lệ phụ gia": ti_le_phu_gia,
                     "Giá trị khuôn": gia_tri_khuon,
@@ -297,6 +299,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                 st.session_state["sx_sp_khuon_in"] = int(sp.get("SP Khuôn", 2))
                 st.session_state["sx_bao_bi_in"] = int(sp.get("Bao bì", 10))
                 st.session_state["sx_phu_kien_in"] = int(sp.get("Phụ kiện", 100))
+                st.session_state["sx_cp_dong_goi_in"] = int(sp.get("Chi phí đóng gói", 0)) 
                 st.session_state["sx_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
                 st.session_state["sx_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
                 st.session_state["sx_gia_khuon_in"] = int(sp.get("Giá trị khuôn", 0))
