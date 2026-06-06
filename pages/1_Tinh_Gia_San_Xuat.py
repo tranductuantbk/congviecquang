@@ -381,6 +381,7 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
         with st.expander("📦 NHÁNH 3: CHI PHÍ KHÁC & KHẤU HAO BỘ", expanded=True):
             bb_bo = st.number_input("Bao bì bộ (VNĐ/Bộ)", value=10, key="bb_bo")
             pk_bo = st.number_input("Phụ kiện bộ (VNĐ/Bộ)", value=100, key="pk_bo")
+            cp_dong_goi_bo = st.number_input("Chi phí đóng gói bộ (VNĐ/Bộ)", value=0, key="cp_dong_goi_bo")
             
             st.markdown("**Tính Khấu hao khuôn bộ:**")
             ck1_bo, ck2_bo = st.columns(2)
@@ -388,7 +389,7 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
             sl_sx_bo = ck2_bo.number_input("SL sản xuất bộ (Cái)", min_value=1, value=10000, key="sl_bo")
             
             kh_bo = gt_khuon_bo / sl_sx_bo if sl_sx_bo > 0 else 0
-            cp_khac_bo = bb_bo + pk_bo + kh_bo
+            cp_khac_bo = bb_bo + pk_bo + cp_dong_goi_bo + kh_bo
 
     gvhb_bo = von_than + von_nap + cp_khac_bo
 
@@ -405,8 +406,8 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
         st.write("---")
         st.markdown("**Phân tích giá thành bộ:**")
         df_bo = pd.DataFrame({
-            "Hạng mục": ["Bộ phận thân", "Bộ phận nắp", "Bao bì & Phụ kiện", "Khấu hao khuôn", "GIÁ VỐN (BỘ)"],
-            "Số tiền (VNĐ)": [f"{von_than:,.0f}", f"{von_nap:,.0f}", f"{bb_bo + pk_bo:,.0f}", f"{kh_bo:,.0f}", f"{gvhb_bo:,.0f}"]
+            "Hạng mục": ["Bộ phận thân", "Bộ phận nắp", "Bao bì, PK & Đóng gói", "Khấu hao khuôn", "GIÁ VỐN (BỘ)"],
+            "Số tiền (VNĐ)": [f"{von_than:,.0f}", f"{von_nap:,.0f}", f"{bb_bo + pk_bo + cp_dong_goi_bo:,.0f}", f"{kh_bo:,.0f}", f"{gvhb_bo:,.0f}"]
         })
         st.table(df_bo)
 
@@ -421,6 +422,9 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                     "Mã SP": ma_bo,
                     "Tên Sản Phẩm": f"[BỘ] {ten_bo}",
                     "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g",
+                    "Bao bì": bb_bo,
+                    "Phụ kiện": pk_bo,
+                    "Chi phí đóng gói": cp_dong_goi_bo,
                     "Giá Vốn": round(gvhb_bo),
                     "Giá Đại Lý": round(gia_dl_bo),
                     "Giá Công ty": round(gia_tc_bo)
