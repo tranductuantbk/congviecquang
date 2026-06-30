@@ -290,21 +290,29 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                 st.session_state["original_ma_sp"] = sp.get("Mã SP", "")
                 st.session_state["original_ten_sp"] = sp.get("Tên Sản Phẩm", "")
             
+                # Hàm hỗ trợ ép kiểu an toàn chống lỗi NaN hoặc chuỗi rỗng từ Pandas
+                def safe_parse(val, val_type=int, default=0):
+                    try:
+                        if pd.isna(val) or str(val).strip() == "": return default
+                        return val_type(float(val))
+                    except:
+                        return default
+
                 st.session_state["sx_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["sx_ten_in"] = sp.get("Tên Sản Phẩm", "")
-                st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
-                st.session_state["sx_gia_nhua_in"] = int(sp.get("Đơn giá nhựa", 23000))
-                st.session_state["sx_gia_may_in"] = int(sp.get("Giá máy", 1700000))
-                st.session_state["sx_chu_ky_in"] = float(sp.get("Chu kỳ", 40.0))
-                st.session_state["sx_sp_khuon_in"] = int(sp.get("SP Khuôn", 2))
-                st.session_state["sx_bao_bi_in"] = int(sp.get("Bao bì", 10))
-                st.session_state["sx_phu_kien_in"] = int(sp.get("Phụ kiện", 100))
-                st.session_state["sx_cp_dong_goi_in"] = int(sp.get("Chi phí đóng gói", 0)) 
-                st.session_state["sx_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
-                st.session_state["sx_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
-                st.session_state["sx_gia_khuon_in"] = int(sp.get("Giá trị khuôn", 0))
-                st.session_state["sx_sl_khuon_in"] = int(sp.get("SL khuôn", 10000))
-                st.session_state["sx_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
+                st.session_state["sx_tl_in"] = safe_parse(sp.get("Trọng lượng", 34.0), float, 34.0)
+                st.session_state["sx_gia_nhua_in"] = safe_parse(sp.get("Đơn giá nhựa", 23000), int, 23000)
+                st.session_state["sx_gia_may_in"] = safe_parse(sp.get("Giá máy", 1700000), int, 1700000)
+                st.session_state["sx_chu_ky_in"] = safe_parse(sp.get("Chu kỳ", 40.0), float, 40.0)
+                st.session_state["sx_sp_khuon_in"] = safe_parse(sp.get("SP Khuôn", 2), int, 2)
+                st.session_state["sx_bao_bi_in"] = safe_parse(sp.get("Bao bì", 10), int, 10)
+                st.session_state["sx_phu_kien_in"] = safe_parse(sp.get("Phụ kiện", 100), int, 100)
+                st.session_state["sx_cp_dong_goi_in"] = safe_parse(sp.get("Chi phí đóng gói", 0), int, 0)
+                st.session_state["sx_dg_pg_in"] = safe_parse(sp.get("Đơn giá phụ gia", 0), int, 0)
+                st.session_state["sx_tl_pg_in"] = safe_parse(sp.get("Tỉ lệ phụ gia", 0.0), float, 0.0)
+                st.session_state["sx_gia_khuon_in"] = safe_parse(sp.get("Giá trị khuôn", 0), int, 0)
+                st.session_state["sx_sl_khuon_in"] = safe_parse(sp.get("SL khuôn", 10000), int, 10000)
+                st.session_state["sx_hs_dl_in"] = safe_parse(sp.get("Hệ số ĐL", 0.6), float, 0.6)
                 
                 st.session_state["is_editing_sx"] = True
                 st.session_state["edit_index_sx"] = idx
