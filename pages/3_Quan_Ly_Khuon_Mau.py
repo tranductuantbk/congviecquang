@@ -267,12 +267,13 @@ list_molds_master = sorted(list(all_molds_set))
 st.title("🏭 Công Cụ Quản Lý Khuôn Mẫu WANCHI")
 st.markdown("---")
 
-tab_A, tab_B, tab_C, tab_D, tab_F, tab_E = st.tabs([
+tab_A, tab_B, tab_C, tab_D, tab_F, tab_G, tab_E = st.tabs([
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
-    "F. Đơn Hàng Gia Công",
+    "F. Tạo Đơn Hàng Gia Công",
+    "G. Theo Dõi Đơn Hàng",
     "E. Danh Sách & Quản Trị"
 ])
 
@@ -489,62 +490,69 @@ with tab_D:
 
 
 # ------------------------------------------
-# MODULE F: ĐƠN HÀNG GIA CÔNG MỚI
+# MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
 # ------------------------------------------
 with tab_F:
-    st.header("F. Đơn Hàng Gia Công Ngoại")
-    st.markdown("Quản lý dòng tiền đặt cọc và theo dõi tiến độ các hạng mục thuê gia công.")
+    st.header("F. Tạo Đơn Hàng Gia Công")
+    st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
-    with st.expander("➕ Tạo Đơn Hàng Mới", expanded=True):
-        with st.form("form_f"):
-            c1, c2 = st.columns(2)
-            ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
-            
-            list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
-            dv_options = ["(Nhập mới)"] + list_vendors
-            dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
-            dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
-            
-            st.markdown("---")
-            danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
-            hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
-            
-            c3, c4 = st.columns(2)
-            ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
-            ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
-            
-            st.markdown("---")
-            c5, c6, c7 = st.columns(3)
-            tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
-            coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
-            ghi_chu_f = c7.text_input("Ghi chú")
-            
-            if st.form_submit_button("Lưu Đơn Hàng Mới"):
-                final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
-                if not final_dv:
-                    st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
-                elif not hang_muc:
-                    st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
-                else:
-                    with st.spinner("⏳ Đang lưu đơn hàng..."):
-                        con_no = tong_gia_f - coc_f
-                        new_row_f = {
-                            "Mã khuôn": ma_khuon_f.strip().upper(),
-                            "Đơn vị gia công": final_dv,
-                            "Các mục gia công": ", ".join(hang_muc),
-                            "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
-                            "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
-                            "Tổng giá gia công": tong_gia_f,
-                            "Cọc đợt 1": coc_f,
-                            "Còn nợ": con_no,
-                            "Ghi chú": ghi_chu_f
-                        }
-                        append_data(new_row_f, "wanchi_f", df_F)
-                    st.rerun()
+    with st.form("form_f"):
+        c1, c2 = st.columns(2)
+        ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
+        
+        list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
+        dv_options = ["(Nhập mới)"] + list_vendors
+        dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
+        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
+        
+        st.markdown("---")
+        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+        hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
+        
+        c3, c4 = st.columns(2)
+        ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
+        ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
+        
+        st.markdown("---")
+        c5, c6, c7 = st.columns(3)
+        tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
+        coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
+        ghi_chu_f = c7.text_input("Ghi chú")
+        
+        if st.form_submit_button("Lưu Đơn Hàng Mới"):
+            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
+            if not final_dv:
+                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
+            elif not hang_muc:
+                st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+            else:
+                with st.spinner("⏳ Đang lưu đơn hàng..."):
+                    con_no = tong_gia_f - coc_f
+                    new_row_f = {
+                        "Mã khuôn": ma_khuon_f.strip().upper(),
+                        "Đơn vị gia công": final_dv,
+                        "Các mục gia công": ", ".join(hang_muc),
+                        "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                        "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                        "Tổng giá gia công": tong_gia_f,
+                        "Cọc đợt 1": coc_f,
+                        "Còn nợ": con_no,
+                        "Ghi chú": ghi_chu_f
+                    }
+                    append_data(new_row_f, "wanchi_f", df_F)
+                st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
+                st.rerun()
 
+# ------------------------------------------
+# MODULE G: THEO DÕI ĐƠN HÀNG GIA CÔNG
+# ------------------------------------------
+with tab_G:
+    st.header("G. Theo Dõi Đơn Hàng")
+    st.markdown("Kiểm tra, cập nhật công nợ và quản lý danh sách đơn hàng đã tạo.")
+    
     st.subheader("Bảng Theo Dõi Đơn Hàng")
     edited_F = st.data_editor(df_F, num_rows="dynamic", use_container_width=True, key="edit_F")
-    if st.button("💾 Cập nhật dữ liệu F"):
+    if st.button("💾 Cập nhật dữ liệu đơn hàng"):
         with st.spinner("⏳ Đang cập nhật..."):
             save_data(edited_F, "wanchi_f")
         st.success("✅ Đã cập nhật thành công!")
@@ -553,12 +561,10 @@ with tab_F:
     st.markdown("---")
     st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
     
-    # THÊM BỘ LỌC KÉP ĐỂ TÁCH ĐƠN CHO TỪNG ĐỐI TÁC
     col_pdf1_f, col_pdf2_f, col_pdf3_f = st.columns([1, 1, 2])
     
     filter_pdf_mold_f = col_pdf1_f.selectbox("1. Chọn Mã khuôn:", ["Tất cả"] + list_molds_master, key="pdf_mold_f")
     
-    # Tự động lọc danh sách đối tác theo mã khuôn đã chọn
     if filter_pdf_mold_f != "Tất cả":
         list_vendors_for_mold = edited_F[edited_F["Mã khuôn"] == filter_pdf_mold_f]["Đơn vị gia công"].dropna().unique().tolist()
     else:
@@ -566,7 +572,7 @@ with tab_F:
         
     filter_pdf_vendor_f = col_pdf2_f.selectbox("2. Chọn Đơn vị gia công:", ["Tất cả"] + list_vendors_for_mold, key="pdf_vendor_f")
     
-    if st.button("Tạo file PDF (Module F)"):
+    if st.button("Tạo file PDF (Module Theo Dõi Đơn Hàng)"):
         with st.spinner("Đang trích xuất file PDF..."):
             df_export_f = edited_F.copy()
             title_pdf = "ĐƠN HÀNG GIA CÔNG"
@@ -577,13 +583,11 @@ with tab_F:
                 
             if filter_pdf_vendor_f != "Tất cả":
                 df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
-                # Nếu lọc tất cả khuôn nhưng lọc 1 đối tác thì ghi tên đối tác vào tiêu đề
                 if filter_pdf_mold_f == "Tất cả":
                     title_pdf += f" - {filter_pdf_vendor_f}"
                     
             pdf_f = export_pdf(df_export_f, title_pdf)
         
-        # Đặt tên file tải xuống thân thiện để bạn dễ gửi Zalo/Zalo
         file_name_pdf = f"WANCHI_DonHang_{filter_pdf_mold_f}"
         if filter_pdf_vendor_f != "Tất cả":
             file_name_pdf += f"_{filter_pdf_vendor_f}"
