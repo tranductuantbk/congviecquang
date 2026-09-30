@@ -1,5 +1,5 @@
 streamlit
 pandas
-SQLAlchemy
-psycopg2-binary
 fpdf2
+psycopg2-binary
+SQLAlchemy
