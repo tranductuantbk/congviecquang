@@ -427,13 +427,22 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
             if ma_bo == "" or ten_bo == "":
                 st.warning("⚠️ Vui lòng nhập Mã và Tên bộ sản phẩm!")
             else:
-                tl_than = next((s.get("Trọng lượng", 0) for s in st.session_state["danh_sach_sp"] if s["Tên Sản Phẩm"] == chon_than), 0)
-                tl_nap = next((s.get("Trọng lượng", 0) for s in st.session_state["danh_sach_sp"] if s["Tên Sản Phẩm"] == chon_nap), 0)
+                # --- SỬA LỖI LƯU TRỌNG LƯỢNG ÉP KIỂU SỐ ---
+                def get_weight(sp_name):
+                    try:
+                        w = next((s.get("Trọng lượng", 0) for s in st.session_state["danh_sach_sp"] if s["Tên Sản Phẩm"] == sp_name), 0)
+                        return float(w) if pd.notna(w) else 0.0
+                    except:
+                        return 0.0
+                        
+                tl_than = get_weight(chon_than)
+                tl_nap = get_weight(chon_nap)
+                tong_tl_bo = tl_than + tl_nap
                 
                 san_pham_moi_bo = {
                     "Mã SP": ma_bo,
                     "Tên Sản Phẩm": f"[BỘ] {ten_bo}",
-                    "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g",
+                    "Trọng lượng": float(tong_tl_bo), # Đã chuyển thành số liệu thay vì chuỗi chữ
                     "Bao bì": bb_bo,
                     "Phụ kiện": pk_bo,
                     "Chi phí đóng gói": cp_dong_goi_bo,
@@ -462,14 +471,15 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
         for sp in st.session_state["danh_sach_sp"]:
             ma_sp = sp.get("Mã SP", "")
             ten_sp = sp.get("Tên Sản Phẩm", "")
-            trong_luong = sp.get("Trọng lượng", "")
+            trong_luong = sp.get("Trọng lượng", 0)
             
-            if isinstance(trong_luong, (int, float)):
+            # --- XỬ LÝ LỖI HIỂN THỊ DỮ LIỆU CŨ (MÀNG LỌC NaN) ---
+            if pd.isna(trong_luong):
+                tl_hien_thi = "0 g"
+            elif isinstance(trong_luong, (int, float)):
                 tl_hien_thi = f"{trong_luong} g"
-            elif isinstance(trong_luong, str):
-                tl_hien_thi = trong_luong
             else:
-                tl_hien_thi = "N/A"
+                tl_hien_thi = str(trong_luong)
                 
             du_lieu_hien_thi.append({
                 "Mã SP": ma_sp,
