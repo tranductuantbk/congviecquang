@@ -18,6 +18,7 @@ if not st.session_state.get("logged_in", False):
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
+    st.error(f"Lỗi chi tiết: {e}") # ĐÃ THÊM DÒNG NÀY ĐỂ XUẤT LỖI GỐC RỄ
     st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
@@ -185,7 +186,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
-                st.warning("⚠️ Vui lòng nhập Mã và Tên sản phẩm!")
+                st.warning("⚠️️ Vui lòng nhập Mã và Tên sản phẩm!")
             else:
                 new_data = {
                     "Mã SP": ma_sp,
