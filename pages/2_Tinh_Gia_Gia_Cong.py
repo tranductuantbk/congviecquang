@@ -26,14 +26,7 @@ def load_data_gc():
         if not inspector.has_table("wanchi_giacong"):
             return []
         df = pd.read_sql("SELECT * FROM wanchi_giacong", con=conn.engine)
-        if not df.empty:
-            # Tự động đồng bộ tên cột cũ sang tên mới để không mất dữ liệu
-            renames = {}
-            if "Hệ số ĐL" in df.columns: renames["Hệ số ĐL"] = "Hệ số LN SP"
-            if "Giá Đại Lý" in df.columns: renames["Giá Đại Lý"] = "Giá Báo KH"
-            df.rename(columns=renames, inplace=True)
-            return df.to_dict('records')
-        return []
+        return df.to_dict('records') if not df.empty else []
     except Exception as e:
         # Xử lý lỗi Cold Start của Neon DB
         st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
@@ -43,10 +36,7 @@ def save_data_gc(data_list):
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
-            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Hệ số LN SP", "Giá Vốn", "Giá Báo KH"])
-        # Bỏ lưu cột Giá Công ty
-        if "Giá Công ty" in df.columns:
-            df = df.drop(columns=["Giá Công ty"])
+            df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_giacong", con=conn.engine, if_exists='replace', index=False)
     except Exception: pass
 
@@ -160,9 +150,12 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         st.table(df_summary)
         
         st.markdown("---")
-        hs_sp = st.number_input("Hệ Số LN SP", value=st.session_state.get("gc_hs_sp_in", 0.6), min_value=0.01, step=0.01, key="gc_hs_sp_in_ui")
-        gia_bao_kh = gvhb / hs_sp
-        st.metric(label="Giá Báo KH", value=f"{round(gia_bao_kh):,} VNĐ")
+        hs_dl = st.number_input("Hệ số LN ĐL", value=st.session_state.get("gc_hs_dl_in", 0.6), min_value=0.01, step=0.01, key="gc_hs_dl_in_ui")
+        gia_dai_ly = gvhb / hs_dl
+        st.metric(label="Giá Đại lý", value=f"{round(gia_dai_ly):,} VNĐ")
+
+        gia_cong_ty = gia_dai_ly / 0.55
+        st.metric(label="Giá Công ty", value=f"{round(gia_cong_ty):,} VNĐ")
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
@@ -171,8 +164,8 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
                 new_data = {
                     "Mã SP": ma_sp, "Tên Sản Phẩm": ten_sp, "Trọng lượng": trong_luong, "Đơn giá nhựa": gia_nhua,
                     "Giá máy": gia_may_ca, "Chu kỳ": chu_ky, "SP Khuôn": sp_khuon, "Bao bì": bao_bi, "Phụ kiện": phu_kien,
-                    "Đơn giá phụ gia": don_gia_phu_gia, "Tỉ lệ phụ gia": ti_le_phu_gia, "Hệ số LN SP": hs_sp,
-                    "Giá Vốn": round(gvhb), "Giá Báo KH": round(gia_bao_kh)
+                    "Đơn giá phụ gia": don_gia_phu_gia, "Tỉ lệ phụ gia": ti_le_phu_gia, "Hệ số ĐL": hs_dl,
+                    "Giá Vốn": round(gvhb), "Giá Đại Lý": round(gia_dai_ly), "Giá Công ty": round(gia_cong_ty)
                 }
                 
                 if st.session_state["is_editing_gc"]:
@@ -216,9 +209,10 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
         if "Giá Tiêu Chuẩn" in df.columns and "Giá Công ty" not in df.columns:
             df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
             
-        cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Báo KH"]
+        cols_to_show = ["Mã SP", "Tên Sản Phẩm", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"]
         df_display = df[[c for c in cols_to_show if c in df.columns]].copy()
         
+        # THÊM CỘT CHECKBOX ĐỂ CHỌN TRỰC TIẾP TỪ BẢNG
         df_display.insert(0, "Chọn", False)
         
         st.markdown("👉 **Đánh dấu tích (✓) vào ô 'Chọn' trong bảng dưới đây để thao tác:**")
@@ -226,9 +220,10 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
             df_display,
             hide_index=True,
             use_container_width=True,
-            disabled=cols_to_show
+            disabled=cols_to_show # Khóa các cột dữ liệu, chỉ cho phép bấm cột Chọn
         )
         
+        # Lấy danh sách các dòng được chọn
         selected_indices = edited_df[edited_df["Chọn"]].index.tolist()
         
         st.markdown("---")
@@ -244,6 +239,7 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
             
             c_btn1, c_btn2 = st.columns(2)
             if c_btn1.button("✏️ Chỉnh sửa sản phẩm này", use_container_width=True):
+                # Lưu thông tin Gốc để so sánh sau khi chỉnh sửa
                 st.session_state["original_ma_sp_gc"] = sp.get("Mã SP", "")
                 st.session_state["original_ten_sp_gc"] = sp.get("Tên Sản Phẩm", "")
             
@@ -258,9 +254,7 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                 st.session_state["gc_phu_kien_in"] = int(sp.get("Phụ kiện", 100))
                 st.session_state["gc_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
                 st.session_state["gc_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
-                
-                # Bắt biến Hệ số LN SP
-                st.session_state["gc_hs_sp_in"] = float(sp.get("Hệ số LN SP", 0.6))
+                st.session_state["gc_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
                 
                 st.session_state["is_editing_gc"] = True
                 st.session_state["edit_index_gc"] = idx
@@ -291,6 +285,7 @@ elif st.session_state["current_tab_gc"] == "📋 2. DANH SÁCH GIA CÔNG":
                 st.error("⚠️ Bạn có chắc chắn muốn xóa TẤT CẢ các sản phẩm đã chọn không?")
                 col_yes, col_no = st.columns(2)
                 if col_yes.button("✔️ Đồng ý xóa tất cả", use_container_width=True, key="yes_del_multi_gc"):
+                    # Xóa theo index từ cao xuống thấp để không bị lệch danh sách
                     for i in sorted(selected_indices, reverse=True):
                         st.session_state["danh_sach_gc"].pop(i)
                     save_data_gc(st.session_state["danh_sach_gc"])
@@ -338,6 +333,7 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
         col_export1, col_export2 = st.columns(2)
         
         with col_export1:
+            # Xuất Excel (CSV)
             csv_data = df_dinh_luong.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
                 label="📊 Tải xuống file Excel (CSV)",
@@ -348,9 +344,12 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
             )
             
         with col_export2:
+            # Hàm xử lý xuất PDF bằng thư viện fpdf2
             def tao_file_pdf(dataframe):
                 pdf = FPDF()
                 pdf.add_page()
+                
+                # NẠP FONT ĐÃ CÀI ĐẶT
                 try:
                     pdf.add_font("CustomFont", "", "arial.ttf", uni=True)
                     pdf.set_font("CustomFont", size=16)
@@ -358,19 +357,23 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
                     st.error(f"Lỗi nạp font: Đảm bảo bạn đã chép file 'arial.ttf' vào cùng thư mục.")
                     pdf.set_font("Arial", size=16)
                 
+                # Tiêu đề
                 pdf.cell(0, 10, txt="BẢNG ĐỊNH LƯỢNG SẢN PHẨM GIA CÔNG (WANCHI)", ln=True, align='C')
                 pdf.ln(5)
                 
+                # Thiết lập cỡ chữ cho bảng
                 try:
                     pdf.set_font("CustomFont", size=10)
                 except:
                     pdf.set_font("Arial", size=10)
                     
+                # Tiêu đề cột
                 pdf.cell(30, 10, "Mã SP", border=1, align='C')
                 pdf.cell(90, 10, "Tên Sản Phẩm", border=1, align='C')
                 pdf.cell(70, 10, "Trọng Lượng", border=1, align='C')
                 pdf.ln()
                 
+                # Nội dung dữ liệu
                 for i, row in dataframe.iterrows():
                     ma = str(row['Mã SP'])
                     ten = str(row['Tên Sản Phẩm'])
@@ -383,6 +386,7 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
                 
                 return bytes(pdf.output())
 
+            # Nút tải PDF
             pdf_bytes = tao_file_pdf(df_dinh_luong)
             st.download_button(
                 label="📄 Tải xuống file PDF",
