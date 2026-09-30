@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import inspect
 import io
 from fpdf import FPDF
+import math
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Tính Giá Sản Xuất", layout="wide")
@@ -18,7 +19,7 @@ if not st.session_state.get("logged_in", False):
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
-    st.error(f"Lỗi chi tiết: {e}") # ĐÃ THÊM DÒNG NÀY ĐỂ XUẤT LỖI GỐC RỄ
+    st.error(f"Lỗi chi tiết: {e}") 
     st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
@@ -186,7 +187,7 @@ if st.session_state["current_tab_sx"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
 
         if st.button("💾 LƯU / CẬP NHẬT SẢN PHẨM", use_container_width=True):
             if ma_sp == "" or ten_sp == "":
-                st.warning("⚠️️ Vui lòng nhập Mã và Tên sản phẩm!")
+                st.warning("⚠ Vui lòng nhập Mã và Tên sản phẩm!")
             else:
                 new_data = {
                     "Mã SP": ma_sp,
@@ -293,19 +294,29 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
             
                 st.session_state["sx_ma_in"] = sp.get("Mã SP", "")
                 st.session_state["sx_ten_in"] = sp.get("Tên Sản Phẩm", "")
-                st.session_state["sx_tl_in"] = float(sp.get("Trọng lượng", 34.0)) if isinstance(sp.get("Trọng lượng", 34.0), (int, float)) else 34.0
-                st.session_state["sx_gia_nhua_in"] = int(sp.get("Đơn giá nhựa", 23000))
-                st.session_state["sx_gia_may_in"] = int(sp.get("Giá máy", 1700000))
-                st.session_state["sx_chu_ky_in"] = float(sp.get("Chu kỳ", 40.0))
-                st.session_state["sx_sp_khuon_in"] = int(sp.get("SP Khuôn", 2))
-                st.session_state["sx_bao_bi_in"] = int(sp.get("Bao bì", 10))
-                st.session_state["sx_phu_kien_in"] = int(sp.get("Phụ kiện", 100))
-                st.session_state["sx_cp_dong_goi_in"] = int(sp.get("Chi phí đóng gói", 0)) 
-                st.session_state["sx_dg_pg_in"] = int(sp.get("Đơn giá phụ gia", 0))
-                st.session_state["sx_tl_pg_in"] = float(sp.get("Tỉ lệ phụ gia", 0.0))
-                st.session_state["sx_gia_khuon_in"] = int(sp.get("Giá trị khuôn", 0))
-                st.session_state["sx_sl_khuon_in"] = int(sp.get("SL khuôn", 10000))
-                st.session_state["sx_hs_dl_in"] = float(sp.get("Hệ số ĐL", 0.6))
+                
+                # --- HÀM XỬ LÝ DỮ LIỆU AN TOÀN TRÁNH LỖI NaN ---
+                def safe_parse(val, default, is_int=True):
+                    try:
+                        if pd.isna(val) or val == "": 
+                            return default
+                        return int(float(val)) if is_int else float(val)
+                    except:
+                        return default
+
+                st.session_state["sx_tl_in"] = safe_parse(sp.get("Trọng lượng"), 34.0, False)
+                st.session_state["sx_gia_nhua_in"] = safe_parse(sp.get("Đơn giá nhựa"), 23000)
+                st.session_state["sx_gia_may_in"] = safe_parse(sp.get("Giá máy"), 1700000)
+                st.session_state["sx_chu_ky_in"] = safe_parse(sp.get("Chu kỳ"), 40.0, False)
+                st.session_state["sx_sp_khuon_in"] = safe_parse(sp.get("SP Khuôn"), 2)
+                st.session_state["sx_bao_bi_in"] = safe_parse(sp.get("Bao bì"), 10)
+                st.session_state["sx_phu_kien_in"] = safe_parse(sp.get("Phụ kiện"), 100)
+                st.session_state["sx_cp_dong_goi_in"] = safe_parse(sp.get("Chi phí đóng gói"), 0) 
+                st.session_state["sx_dg_pg_in"] = safe_parse(sp.get("Đơn giá phụ gia"), 0)
+                st.session_state["sx_tl_pg_in"] = safe_parse(sp.get("Tỉ lệ phụ gia"), 0.0, False)
+                st.session_state["sx_gia_khuon_in"] = safe_parse(sp.get("Giá trị khuôn"), 0)
+                st.session_state["sx_sl_khuon_in"] = safe_parse(sp.get("SL khuôn"), 10000)
+                st.session_state["sx_hs_dl_in"] = safe_parse(sp.get("Hệ số ĐL"), 0.6, False)
                 
                 st.session_state["is_editing_sx"] = True
                 st.session_state["edit_index_sx"] = idx
