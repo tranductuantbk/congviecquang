@@ -281,7 +281,6 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
             c_btn1, c_btn2 = st.columns(2)
             if c_btn1.button("✏️ Chỉnh sửa sản phẩm này", use_container_width=True):
                 
-                # --- HÀM XỬ LÝ DỮ LIỆU AN TOÀN TRÁNH LỖI NaN ---
                 def safe_parse(val, default, is_int=True):
                     try:
                         if pd.isna(val) or val == "": 
@@ -309,7 +308,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                     st.session_state["is_editing_bo"] = True
                     st.session_state["edit_index_bo"] = idx
                     
-                    st.session_state["current_tab_sx"] = danh_sach_tabs[2] # Điều hướng sang Tab 3
+                    st.session_state["current_tab_sx"] = danh_sach_tabs[2]
                     st.rerun()
                     
                 # NẾU LÀ SẢN PHẨM LẺ -> NHẢY SANG TAB 1
@@ -336,7 +335,7 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                     st.session_state["is_editing_sx"] = True
                     st.session_state["edit_index_sx"] = idx
                     
-                    st.session_state["current_tab_sx"] = danh_sach_tabs[0] # Điều hướng sang Tab 1
+                    st.session_state["current_tab_sx"] = danh_sach_tabs[0]
                     st.rerun()
                 
             if c_btn2.button("🗑️ Xóa sản phẩm này", use_container_width=True):
@@ -461,12 +460,11 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                         
                 tl_than = get_weight(chon_than)
                 tl_nap = get_weight(chon_nap)
-                tong_tl_bo = tl_than + tl_nap
                 
                 san_pham_moi_bo = {
                     "Mã SP": ma_bo,
                     "Tên Sản Phẩm": f"[BỘ] {ten_bo}",
-                    "Trọng lượng": float(tong_tl_bo),
+                    "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g", # Đã chuyển lại thành chuỗi định dạng chi tiết
                     "Bao bì": bb_bo,
                     "Phụ kiện": pk_bo,
                     "Chi phí đóng gói": cp_dong_goi_bo,
@@ -475,7 +473,6 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                     "Giá Công ty": round(gia_tc_bo)
                 }
                 
-                # --- LOGIC LƯU CHO TAB 3 (SỬA HOẶC TẠO MỚI) ---
                 if st.session_state.get("is_editing_bo"):
                     old_ma = st.session_state.get("original_ma_bo", "")
                     old_ten = st.session_state.get("original_ten_bo", "")
@@ -487,7 +484,6 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                         st.session_state["danh_sach_sp"].append(san_pham_moi_bo)
                         st.success(f"✅ Đã TẠO MỚI thành công bộ sản phẩm '{ten_bo}' từ bản sao!")
                     
-                    # Thoát chế độ sửa bộ
                     st.session_state["is_editing_bo"] = False
                     st.session_state["original_ma_bo"] = ""
                     st.session_state["original_ten_bo"] = ""
@@ -522,7 +518,7 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
             elif isinstance(trong_luong, (int, float)):
                 tl_hien_thi = f"{trong_luong} g"
             else:
-                tl_hien_thi = str(trong_luong)
+                tl_hien_thi = str(trong_luong) # Hệ thống sẽ đọc và hiển thị mượt mà chuỗi "Thân: ...g | Nắp: ...g"
                 
             du_lieu_hien_thi.append({
                 "Mã SP": ma_sp,
