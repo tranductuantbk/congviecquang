@@ -155,7 +155,7 @@ def export_pdf(df, title):
     return pdf_bytes
 
 
-# ---> HÀM XUẤT HỢP ĐỒNG PDF <---
+# ---> HÀM XUẤT HỢP ĐỒNG PDF ĐÃ SỬA LỖI TRÀN CHỮ <---
 def export_contract_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -184,6 +184,8 @@ def export_contract_pdf(context):
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="1. Bên A (Bên đặt hàng):", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
+    
+    # Ép dùng multi_cell cho tất cả thông tin đầu vào để tự động xuống dòng an toàn
     pdf.multi_cell(0, 6, txt=f"- Tên doanh nghiệp: {context['ten_cong_ty_khach']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Đại diện là Ông/Bà: {context['nguoi_dai_dien']}        Chức vụ: {context['chuc_vu']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Địa chỉ: {context['dia_chi_khach']}", align='L')
@@ -213,6 +215,7 @@ def export_contract_pdf(context):
     pdf.cell(col_w[5], 8, txt="Ghi chú", border=1, align='C')
     pdf.ln()
 
+    # Xử lý tự động cắt bớt chữ nếu tên khuôn quá dài
     pdf.set_font(font_name, '', 10)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     
@@ -572,33 +575,34 @@ list_molds_master = sorted(list(all_molds_set))
 
 
 # ==========================================
-# GIAO DIỆN CHÍNH (ĐIỀU HƯỚNG BẰNG LƯỚI NÚT BẤM)
+# GIAO DIỆN CHÍNH & LƯỚI ĐIỀU HƯỚNG 3 CỘT
 # ==========================================
 st.title("🏭 Công Cụ Quản Lý Khuôn Mẫu WANCHI")
 st.markdown("---")
 
-if "current_tab_khuon" not in st.session_state:
-    st.session_state.current_tab_khuon = "A. Nguyên Vật Liệu"
+if "current_tab" not in st.session_state:
+    st.session_state.current_tab = "A. Nguyên Vật Liệu"
 
 menu_items = [
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
+    "E. Danh Sách & Quản Trị",
     "F. Tạo Đơn Hàng Gia Công",
     "G. Theo Dõi Đơn Hàng",
-    "E. Danh Sách & Quản Trị",
-    "H. Báo Giá & Hợp Đồng"
+    "H. Báo Giá",
+    "I. Hợp Đồng"
 ]
 
 for i in range(0, len(menu_items), 3):
     cols = st.columns(3)
-    for j in range(3):
+    for j, col in enumerate(cols):
         if i + j < len(menu_items):
             item = menu_items[i + j]
-            btn_style = "primary" if st.session_state.current_tab_khuon == item else "secondary"
-            if cols[j].button(item, use_container_width=True, type=btn_style):
-                st.session_state.current_tab_khuon = item
+            btn_style = "primary" if st.session_state.current_tab == item else "secondary"
+            if col.button(item, use_container_width=True, type=btn_style):
+                st.session_state.current_tab = item
                 st.rerun()
 
 st.markdown("---")
@@ -606,7 +610,7 @@ st.markdown("---")
 # ------------------------------------------
 # MODULE A: NGUYÊN VẬT LIỆU
 # ------------------------------------------
-if st.session_state.current_tab_khuon == "A. Nguyên Vật Liệu":
+if st.session_state.current_tab == "A. Nguyên Vật Liệu":
     st.header("A. Nguyên Vật Liệu")
     with st.expander("➕ Nhập Nguyên Vật Liệu Mới"):
         with st.form("form_A"):
@@ -633,7 +637,7 @@ if st.session_state.current_tab_khuon == "A. Nguyên Vật Liệu":
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu (Cho phép chỉnh sửa/xóa trực tiếp)")
-    edited_A = st.data_editor(df_A, num_rows="dynamic", use_container_width=True, key="edit_A")
+    edited_A = st.data_editor(df_A, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_A")
     if st.button("💾 Cập nhật dữ liệu A"):
         with st.spinner("⏳ Đang cập nhật dữ liệu, vui lòng đợi..."):
             save_data(edited_A, "wanchi_a")
@@ -655,7 +659,7 @@ if st.session_state.current_tab_khuon == "A. Nguyên Vật Liệu":
 # ------------------------------------------
 # MODULE B: GIA CÔNG
 # ------------------------------------------
-elif st.session_state.current_tab_khuon == "B. Gia Công":
+elif st.session_state.current_tab == "B. Gia Công":
     st.header("B. Gia Công")
     with st.expander("➕ Nhập Chi Phí Gia Công Mới"):
         with st.form("form_B"):
@@ -664,15 +668,17 @@ elif st.session_state.current_tab_khuon == "B. Gia Công":
             ncc_b = c2.text_input("Đơn vị gia công")
             ma_khuon_b = c3.selectbox("Chọn mã khuôn:", list_molds_master) if list_molds_master else c3.text_input("Mã khuôn")
             
-            c4, c5, c6, c7 = st.columns(4)
+            c4, c5, c6 = st.columns(3)
             cat_day = c4.number_input("Cắt dây", min_value=0, step=1)
             xung_dien = c5.number_input("Xung điện (EDM)", min_value=0, step=1)
             phay_cnc = c6.number_input("Phay CNC", min_value=0, step=1)
-            nhiet_luyen = c7.number_input("Nhiệt Luyện", min_value=0, step=1)
             
-            c8, c9, c10, c11 = st.columns(4)
+            c7, c8, c9 = st.columns(3)
+            nhiet_luyen = c7.number_input("Nhiệt Luyện", min_value=0, step=1)
             danh_bong = c8.number_input("Đánh bóng", min_value=0, step=1)
             nham = c9.number_input("Tạo Nhám hoa văn", min_value=0, step=1)
+            
+            c10, c11, _ = st.columns(3)
             don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
             rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1)
             
@@ -690,7 +696,7 @@ elif st.session_state.current_tab_khuon == "B. Gia Công":
                 st.rerun()
 
     st.subheader("Bảng Dữ Liệu Gia Công")
-    edited_B = st.data_editor(df_B, num_rows="dynamic", use_container_width=True, key="edit_B")
+    edited_B = st.data_editor(df_B, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_B")
     if st.button("💾 Cập nhật dữ liệu B"):
         with st.spinner("⏳ Đang cập nhật dữ liệu..."):
             save_data(edited_B, "wanchi_b")
@@ -712,7 +718,7 @@ elif st.session_state.current_tab_khuon == "B. Gia Công":
 # ------------------------------------------
 # MODULE C: VẬT TƯ
 # ------------------------------------------
-elif st.session_state.current_tab_khuon == "C. Vật Tư Khuôn Mẫu":
+elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
     st.header("C. Vật Tư Khuôn Mẫu")
     with st.expander("➕ Nhập Vật Tư Mới"):
         with st.form("form_C"):
@@ -737,7 +743,7 @@ elif st.session_state.current_tab_khuon == "C. Vật Tư Khuôn Mẫu":
                 st.rerun()
 
     st.subheader("Bảng Dữ Tại Vật Tư")
-    edited_C = st.data_editor(df_C, num_rows="dynamic", use_container_width=True, key="edit_C")
+    edited_C = st.data_editor(df_C, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_C")
     if st.button("💾 Cập nhật dữ liệu C"):
         with st.spinner("⏳ Đang cập nhật dữ liệu..."):
             save_data(edited_C, "wanchi_c")
@@ -759,7 +765,7 @@ elif st.session_state.current_tab_khuon == "C. Vật Tư Khuôn Mẫu":
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
 # ------------------------------------------
-elif st.session_state.current_tab_khuon == "D. Tổng Giá Khuôn":
+elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
     st.header("D. Tổng Hợp Giá Trị Khuôn")
     
     with st.expander("🔄 Cập Nhật Tổng Giá Tự Động"):
@@ -796,7 +802,7 @@ elif st.session_state.current_tab_khuon == "D. Tổng Giá Khuôn":
 
     st.markdown("---")
     st.subheader("Bảng Tổng Hợp Chi Phí")
-    edited_D = st.data_editor(df_D, num_rows="dynamic", use_container_width=True, key="edit_D")
+    edited_D = st.data_editor(df_D, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_D")
     if st.button("💾 Cập nhật bảng Tổng"):
         with st.spinner("⏳ Đang lưu dữ liệu..."):
             save_data(edited_D, "wanchi_d")
@@ -816,117 +822,9 @@ elif st.session_state.current_tab_khuon == "D. Tổng Giá Khuôn":
 
 
 # ------------------------------------------
-# MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
-# ------------------------------------------
-elif st.session_state.current_tab_khuon == "F. Tạo Đơn Hàng Gia Công":
-    st.header("F. Tạo Đơn Hàng Gia Công")
-    st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
-    
-    with st.form("form_f"):
-        c1, c2 = st.columns(2)
-        ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
-        
-        list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
-        dv_options = ["(Nhập mới)"] + list_vendors
-        dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
-        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
-        
-        st.markdown("---")
-        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
-        hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
-        
-        c3, c4 = st.columns(2)
-        ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
-        ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
-        
-        st.markdown("---")
-        c5, c6, c7 = st.columns(3)
-        tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
-        coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
-        ghi_chu_f = c7.text_input("Ghi chú")
-        
-        if st.form_submit_button("Lưu Đơn Hàng Mới"):
-            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
-            if not final_dv:
-                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
-            elif not hang_muc:
-                st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
-            else:
-                with st.spinner("⏳ Đang lưu đơn hàng..."):
-                    con_no = tong_gia_f - coc_f
-                    new_row_f = {
-                        "Mã khuôn": ma_khuon_f.strip().upper(),
-                        "Đơn vị gia công": final_dv,
-                        "Các mục gia công": ", ".join(hang_muc),
-                        "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
-                        "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
-                        "Tổng giá gia công": tong_gia_f,
-                        "Cọc đợt 1": coc_f,
-                        "Còn nợ": con_no,
-                        "Ghi chú": ghi_chu_f
-                    }
-                    append_data(new_row_f, "wanchi_f", df_F)
-                st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
-                st.rerun()
-
-# ------------------------------------------
-# MODULE G: THEO DÕI ĐƠN HÀNG GIA CÔNG
-# ------------------------------------------
-elif st.session_state.current_tab_khuon == "G. Theo Dõi Đơn Hàng":
-    st.header("G. Theo Dõi Đơn Hàng")
-    st.markdown("Kiểm tra, cập nhật công nợ và quản lý danh sách đơn hàng đã tạo.")
-    
-    st.subheader("Bảng Theo Dõi Đơn Hàng")
-    edited_F = st.data_editor(df_F, num_rows="dynamic", use_container_width=True, key="edit_F")
-    if st.button("💾 Cập nhật dữ liệu đơn hàng"):
-        with st.spinner("⏳ Đang cập nhật..."):
-            save_data(edited_F, "wanchi_f")
-        st.success("✅ Đã cập nhật thành công!")
-        st.rerun()
-        
-    st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
-    
-    col_pdf1_f, col_pdf2_f, col_pdf3_f = st.columns([1, 1, 2])
-    
-    filter_pdf_mold_f = col_pdf1_f.selectbox("1. Chọn Mã khuôn:", ["Tất cả"] + list_molds_master, key="pdf_mold_f")
-    
-    if filter_pdf_mold_f != "Tất cả":
-        list_vendors_for_mold = edited_F[edited_F["Mã khuôn"] == filter_pdf_mold_f]["Đơn vị gia công"].dropna().unique().tolist()
-    else:
-        list_vendors_for_mold = edited_F["Đơn vị gia công"].dropna().unique().tolist()
-        
-    filter_pdf_vendor_f = col_pdf2_f.selectbox("2. Chọn Đơn vị gia công:", ["Tất cả"] + list_vendors_for_mold, key="pdf_vendor_f")
-    
-    if st.button("Tạo file PDF (Module Theo Dõi Đơn Hàng)"):
-        with st.spinner("Đang trích xuất file PDF..."):
-            df_export_f = edited_F.copy()
-            title_pdf = "ĐƠN HÀNG GIA CÔNG"
-            
-            if filter_pdf_mold_f != "Tất cả":
-                df_export_f = df_export_f[df_export_f["Mã khuôn"] == filter_pdf_mold_f]
-                title_pdf += f" {filter_pdf_mold_f}"
-                
-            if filter_pdf_vendor_f != "Tất cả":
-                df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
-                if filter_pdf_mold_f == "Tất cả":
-                    title_pdf += f" - {filter_pdf_vendor_f}"
-                    
-            pdf_f = export_pdf(df_export_f, title_pdf)
-        
-        file_name_pdf = f"WANCHI_DonHang_{filter_pdf_mold_f}"
-        if filter_pdf_vendor_f != "Tất cả":
-            file_name_pdf += f"_{filter_pdf_vendor_f}"
-        file_name_pdf += ".pdf"
-        
-        col_pdf3_f.markdown("<br>", unsafe_allow_html=True)
-        col_pdf3_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, file_name_pdf, "application/pdf")
-
-
-# ------------------------------------------
 # MODULE E: DANH SÁCH KHUÔN TỔNG HỢP & QUẢN TRỊ
 # ------------------------------------------
-elif st.session_state.current_tab_khuon == "E. Danh Sách & Quản Trị":
+elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
     st.header("E. Danh Sách Các Khuôn Đã Làm")
     st.markdown("Bảng tóm tắt tự động thu thập ngày bắt đầu làm khuôn (ngày sớm nhất nhập vật liệu/gia công) và tổng giá trị cho từng mã khuôn.")
     
@@ -1029,18 +927,213 @@ elif st.session_state.current_tab_khuon == "E. Danh Sách & Quản Trị":
     else:
         st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
 
+
 # ------------------------------------------
-# MODULE H: BÁO GIÁ & HỢP ĐỒNG (ĐÃ TÁCH RIÊNG KHUÔN & SẢN PHẨM)
+# MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
 # ------------------------------------------
-elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
-    st.header("H. Báo Giá & Hợp Đồng Khuôn Mẫu (PDF)")
-    st.markdown("Hệ thống sẽ tự động tách thành **Báo Giá Khuôn**, **Báo Giá Sản Phẩm** và **Hợp Đồng** riêng biệt.")
+elif st.session_state.current_tab == "F. Tạo Đơn Hàng Gia Công":
+    st.header("F. Tạo Đơn Hàng Gia Công")
+    st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
-    with st.form("form_bao_gia_hop_dong"):
-        st.subheader("1. Thông Khách hàng (Bên A)")
+    with st.form("form_f"):
+        c1, c2 = st.columns(2)
+        ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
+        
+        list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
+        dv_options = ["(Nhập mới)"] + list_vendors
+        dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
+        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
+        
+        st.markdown("---")
+        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+        hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
+        
+        c3, c4 = st.columns(2)
+        ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
+        ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
+        
+        st.markdown("---")
+        c5, c6, c7 = st.columns(3)
+        tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
+        coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
+        ghi_chu_f = c7.text_input("Ghi chú")
+        
+        if st.form_submit_button("Lưu Đơn Hàng Mới"):
+            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
+            if not final_dv:
+                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
+            elif not hang_muc:
+                st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+            else:
+                with st.spinner("⏳ Đang lưu đơn hàng..."):
+                    con_no = tong_gia_f - coc_f
+                    new_row_f = {
+                        "Mã khuôn": ma_khuon_f.strip().upper(),
+                        "Đơn vị gia công": final_dv,
+                        "Các mục gia công": ", ".join(hang_muc),
+                        "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                        "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                        "Tổng giá gia công": tong_gia_f,
+                        "Cọc đợt 1": coc_f,
+                        "Còn nợ": con_no,
+                        "Ghi chú": ghi_chu_f
+                    }
+                    append_data(new_row_f, "wanchi_f", df_F)
+                st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
+                st.rerun()
+
+# ------------------------------------------
+# MODULE G: THEO DÕI ĐƠN HÀNG GIA CÔNG
+# ------------------------------------------
+elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
+    st.header("G. Theo Dõi Đơn Hàng")
+    st.markdown("Kiểm tra, cập nhật công nợ và quản lý danh sách đơn hàng đã tạo.")
+    
+    st.subheader("Bảng Theo Dõi Đơn Hàng")
+    edited_F = st.data_editor(df_F, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_F")
+    if st.button("💾 Cập nhật dữ liệu đơn hàng"):
+        with st.spinner("⏳ Đang cập nhật..."):
+            save_data(edited_F, "wanchi_f")
+        st.success("✅ Đã cập nhật thành công!")
+        st.rerun()
+        
+    st.markdown("---")
+    st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
+    
+    col_pdf1_f, col_pdf2_f, col_pdf3_f = st.columns([1, 1, 2])
+    
+    filter_pdf_mold_f = col_pdf1_f.selectbox("1. Chọn Mã khuôn:", ["Tất cả"] + list_molds_master, key="pdf_mold_f")
+    
+    if filter_pdf_mold_f != "Tất cả":
+        list_vendors_for_mold = edited_F[edited_F["Mã khuôn"] == filter_pdf_mold_f]["Đơn vị gia công"].dropna().unique().tolist()
+    else:
+        list_vendors_for_mold = edited_F["Đơn vị gia công"].dropna().unique().tolist()
+        
+    filter_pdf_vendor_f = col_pdf2_f.selectbox("2. Chọn Đơn vị gia công:", ["Tất cả"] + list_vendors_for_mold, key="pdf_vendor_f")
+    
+    if st.button("Tạo file PDF (Module Theo Dõi Đơn Hàng)"):
+        with st.spinner("Đang trích xuất file PDF..."):
+            df_export_f = edited_F.copy()
+            title_pdf = "ĐƠN HÀNG GIA CÔNG"
+            
+            if filter_pdf_mold_f != "Tất cả":
+                df_export_f = df_export_f[df_export_f["Mã khuôn"] == filter_pdf_mold_f]
+                title_pdf += f" {filter_pdf_mold_f}"
+                
+            if filter_pdf_vendor_f != "Tất cả":
+                df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
+                if filter_pdf_mold_f == "Tất cả":
+                    title_pdf += f" - {filter_pdf_vendor_f}"
+                    
+            pdf_f = export_pdf(df_export_f, title_pdf)
+        
+        file_name_pdf = f"WANCHI_DonHang_{filter_pdf_mold_f}"
+        if filter_pdf_vendor_f != "Tất cả":
+            file_name_pdf += f"_{filter_pdf_vendor_f}"
+        file_name_pdf += ".pdf"
+        
+        col_pdf3_f.markdown("<br>", unsafe_allow_html=True)
+        col_pdf3_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, file_name_pdf, "application/pdf")
+
+
+# ------------------------------------------
+# MODULE H: BÁO GIÁ
+# ------------------------------------------
+elif st.session_state.current_tab == "H. Báo Giá":
+    st.header("H. Báo Giá Khuôn & Sản Phẩm (PDF)")
+    st.markdown("Nhập thông tin bên dưới để tự động tạo file **PDF Báo Giá Khuôn** và **Báo Giá Sản Phẩm**.")
+    
+    with st.form("form_bao_gia"):
+        st.subheader("1. Thông tin Khách hàng")
         c1, c2 = st.columns(2)
         ten_cong_ty_khach = c1.text_input("Tên doanh nghiệp / Khách hàng")
-        dia_chi_khach = c2.text_input("Địa chỉ")
+        nguoi_dai_dien = c2.text_input("Người đại diện (Ông/Bà)")
+        
+        st.markdown("---")
+        st.subheader("2. Thông tin chung")
+        c3, c4 = st.columns(2)
+        ngay_lap = c3.date_input("Ngày lập báo giá", datetime.today())
+        chat_lieu_nhua = c4.text_input("Chất liệu sản phẩm (nhựa)", value="Nhựa ABS")
+
+        st.markdown("---")
+        st.subheader("3. Dành cho Báo Giá Khuôn")
+        c5, c6, c7 = st.columns(3)
+        ten_khuon = c5.text_input("Tên khuôn (VD: Khuôn Anten)")
+        sl_khuon = c6.number_input("Số lượng khuôn", min_value=1, value=1)
+        gia_khuon = c7.number_input("Giá khuôn (VNĐ)", min_value=0, value=24000000, step=1000000)
+
+        st.markdown("---")
+        st.subheader("4. Dành cho Báo Giá Sản Phẩm")
+        c8, c9, c10 = st.columns(3)
+        ten_san_pham = c8.text_input("Tên sản phẩm (VD: Sản phẩm Anten)")
+        sl_san_pham = c9.number_input("Số lượng sản phẩm", min_value=1, value=1000)
+        gia_san_pham = c10.number_input("Đơn giá sản phẩm (VNĐ)", min_value=0, value=5000, step=100)
+        
+        submitted_bg = st.form_submit_button("Tạo File Báo Giá (PDF)", use_container_width=True, type="primary")
+
+    if submitted_bg:
+        if not ten_cong_ty_khach:
+            st.error("⚠️ Vui lòng nhập Tên doanh nghiệp / Khách hàng.")
+        else:
+            with st.spinner("⏳ Đang tạo các file PDF Báo Giá..."):
+                context_bg = {
+                    "ngay": ngay_lap.strftime("%d"),
+                    "thang": ngay_lap.strftime("%m"),
+                    "nam": ngay_lap.strftime("%Y"),
+                    "ten_cong_ty_khach": ten_cong_ty_khach,
+                    "nguoi_dai_dien": nguoi_dai_dien,
+                    "ten_khuon": ten_khuon if ten_khuon else "Khuôn",
+                    "sl_khuon": sl_khuon,
+                    "gia_khuon_str": f"{gia_khuon:,.0f}".replace(",", "."),
+                    "ten_san_pham": ten_san_pham if ten_san_pham else "Sản phẩm",
+                    "sl_san_pham": f"{sl_san_pham:,.0f}".replace(",", "."),
+                    "gia_san_pham_str": f"{gia_san_pham:,.0f}".replace(",", "."),
+                    "chat_lieu_nhua": chat_lieu_nhua
+                }
+
+                col_down1, col_down2 = st.columns(2)
+
+                # 1. XUẤT FILE BÁO GIÁ KHUÔN
+                try:
+                    pdf_bgk_bytes = export_quote_khuon_pdf(context_bg)
+                    col_down1.success("✅ Báo Giá Khuôn đã sẵn sàng")
+                    col_down1.download_button(
+                        label="⬇️ Tải BÁO GIÁ KHUÔN",
+                        data=pdf_bgk_bytes,
+                        file_name=f"BaoGia_Khuon_{ten_cong_ty_khach}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    col_down1.error(f"Lỗi tạo Báo Giá Khuôn: {e}")
+                    
+                # 2. XUẤT FILE BÁO GIÁ SẢN PHẨM
+                try:
+                    pdf_bgsp_bytes = export_quote_sp_pdf(context_bg)
+                    col_down2.success("✅ Báo Giá Sản Phẩm đã sẵn sàng")
+                    col_down2.download_button(
+                        label="⬇️ Tải BÁO GIÁ SẢN PHẨM",
+                        data=pdf_bgsp_bytes,
+                        file_name=f"BaoGia_SanPham_{ten_cong_ty_khach}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    col_down2.error(f"Lỗi tạo Báo Giá Sản Phẩm: {e}")
+
+
+# ------------------------------------------
+# MODULE I: HỢP ĐỒNG
+# ------------------------------------------
+elif st.session_state.current_tab == "I. Hợp Đồng":
+    st.header("I. Hợp Đồng Khuôn Mẫu (PDF)")
+    st.markdown("Nhập thông tin bên dưới để tự động tạo file **Hợp Đồng Sản Xuất Khuôn Mẫu**.")
+    
+    with st.form("form_hop_dong"):
+        st.subheader("1. Thông tin Khách hàng (Bên A)")
+        c1, c2 = st.columns(2)
+        ten_cong_ty_khach = c1.text_input("Tên doanh nghiệp / Khách hàng")
+        dia_chi_khach = c2.text_input("Địa chỉ doanh nghiệp")
         
         c3, c4, c5 = st.columns(3)
         nguoi_dai_dien = c3.text_input("Người đại diện (Ông/Bà)")
@@ -1048,34 +1141,24 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
         sdt_khach = c5.text_input("Số điện thoại")
         
         st.markdown("---")
-        st.subheader("2. Thông tin Sản phẩm & Khuôn mẫu")
+        st.subheader("2. Thông tin Khuôn mẫu & Giao nhận")
         c6, c7 = st.columns(2)
         ten_khuon = c6.text_input("Tên khuôn (VD: Khuôn Anten)")
-        ten_san_pham = c7.text_input("Tên sản phẩm (VD: Sản phẩm Anten)")
+        sl_khuon = c7.number_input("Số lượng khuôn", min_value=1, value=1)
         
         c8, c9, c10 = st.columns(3)
-        sl_khuon = c8.number_input("Số lượng khuôn", min_value=1, value=1)
-        gia_khuon = c9.number_input("Giá khuôn (VNĐ)", min_value=0, value=24000000, step=1000000)
-        chat_lieu_nhua = c10.text_input("Chất liệu sản phẩm (nhựa)", value="Nhựa ABS")
-
-        c13, c14 = st.columns(2)
-        sl_san_pham = c13.number_input("Số lượng sản phẩm", min_value=1, value=1000)
-        gia_san_pham = c14.number_input("Đơn giá sản phẩm (VNĐ)", min_value=0, value=5000, step=100)
+        gia_khuon = c8.number_input("Giá khuôn (VNĐ)", min_value=0, value=24000000, step=1000000)
+        thoi_gian_giao = c9.number_input("Thời gian giao mẫu (Ngày)", min_value=1, value=30)
+        ngay_lap = c10.date_input("Ngày lập hợp đồng", datetime.today())
         
-        st.markdown("---")
-        st.subheader("3. Thông tin Hợp đồng / Điều khoản")
-        c11, c12 = st.columns(2)
-        ngay_lap = c11.date_input("Ngày lập", datetime.today())
-        thoi_gian_giao = c12.number_input("Thời gian giao mẫu khuôn (Ngày)", min_value=1, value=30)
-        
-        submitted = st.form_submit_button("Tạo File Báo Giá & Hợp Đồng (PDF)", use_container_width=True, type="primary")
+        submitted_hd = st.form_submit_button("Tạo File Hợp Đồng (PDF)", use_container_width=True, type="primary")
 
-    if submitted:
+    if submitted_hd:
         if not ten_cong_ty_khach or not ten_khuon:
             st.error("⚠️ Vui lòng nhập Tên doanh nghiệp và Tên khuôn.")
         else:
-            with st.spinner("⏳ Đang tách và tạo các file PDF..."):
-                context = {
+            with st.spinner("⏳ Đang tạo file PDF Hợp Đồng..."):
+                context_hd = {
                     "ngay": ngay_lap.strftime("%d"),
                     "thang": ngay_lap.strftime("%m"),
                     "nam": ngay_lap.strftime("%Y"),
@@ -1085,55 +1168,21 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
                     "dia_chi_khach": dia_chi_khach,
                     "sdt_khach": sdt_khach,
                     "ten_khuon": ten_khuon,
-                    "ten_san_pham": ten_san_pham,
                     "sl_khuon": sl_khuon,
                     "gia_khuon_str": f"{gia_khuon:,.0f}".replace(",", "."),
-                    "sl_san_pham": f"{sl_san_pham:,.0f}".replace(",", "."),
-                    "gia_san_pham_str": f"{gia_san_pham:,.0f}".replace(",", "."),
-                    "chat_lieu_nhua": chat_lieu_nhua,
                     "thoi_gian_giao": thoi_gian_giao
                 }
 
-                col_down1, col_down2, col_down3 = st.columns(3)
-
-                # 1. XUẤT FILE HỢP ĐỒNG KHUÔN
+                # XUẤT FILE HỢP ĐỒNG
                 try:
-                    pdf_hd_bytes = export_contract_pdf(context)
-                    col_down1.success("✅ Hợp Đồng")
-                    col_down1.download_button(
-                        label="⬇️ Tải HỢP ĐỒNG",
+                    pdf_hd_bytes = export_contract_pdf(context_hd)
+                    st.success("✅ File Hợp Đồng đã sẵn sàng!")
+                    st.download_button(
+                        label="⬇️ Tải xuống HỢP ĐỒNG (PDF)",
                         data=pdf_hd_bytes,
-                        file_name=f"HopDong_Khuon_{ten_cong_ty_khach}.pdf",
+                        file_name=f"HopDong_KhuonMau_{ten_cong_ty_khach}.pdf",
                         mime="application/pdf",
                         use_container_width=True
                     )
                 except Exception as e:
-                    col_down1.error(f"Lỗi: {e}")
-
-                # 2. XUẤT FILE BÁO GIÁ KHUÔN
-                try:
-                    pdf_bgk_bytes = export_quote_khuon_pdf(context)
-                    col_down2.success("✅ Báo Giá Khuôn")
-                    col_down2.download_button(
-                        label="⬇️ Tải BÁO GIÁ KHUÔN",
-                        data=pdf_bgk_bytes,
-                        file_name=f"BaoGia_Khuon_{ten_cong_ty_khach}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    col_down2.error(f"Lỗi: {e}")
-                    
-                # 3. XUẤT FILE BÁO GIÁ SẢN PHẨM
-                try:
-                    pdf_bgsp_bytes = export_quote_sp_pdf(context)
-                    col_down3.success("✅ Báo Giá Sản Phẩm")
-                    col_down3.download_button(
-                        label="⬇️ Tải BÁO GIÁ SẢN PHẨM",
-                        data=pdf_bgsp_bytes,
-                        file_name=f"BaoGia_SanPham_{ten_cong_ty_khach}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    col_down3.error(f"Lỗi: {e}")
+                    st.error(f"Lỗi tạo Hợp Đồng PDF. Chi tiết: {e}")
