@@ -155,7 +155,7 @@ def export_pdf(df, title):
     return pdf_bytes
 
 
-# ---> HÀM XUẤT HỢP ĐỒNG PDF ĐÃ SỬA LỖI TRÀN CHỮ <---
+# ---> HÀM XUẤT HỢP ĐỒNG PDF <---
 def export_contract_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -184,8 +184,6 @@ def export_contract_pdf(context):
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="1. Bên A (Bên đặt hàng):", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
-    
-    # Ép dùng multi_cell cho tất cả thông tin đầu vào để tự động xuống dòng an toàn
     pdf.multi_cell(0, 6, txt=f"- Tên doanh nghiệp: {context['ten_cong_ty_khach']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Đại diện là Ông/Bà: {context['nguoi_dai_dien']}        Chức vụ: {context['chuc_vu']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Địa chỉ: {context['dia_chi_khach']}", align='L')
@@ -215,7 +213,6 @@ def export_contract_pdf(context):
     pdf.cell(col_w[5], 8, txt="Ghi chú", border=1, align='C')
     pdf.ln()
 
-    # Xử lý tự động cắt bớt chữ nếu tên khuôn quá dài
     pdf.set_font(font_name, '', 10)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     
@@ -226,13 +223,13 @@ def export_contract_pdf(context):
     pdf.cell(col_w[1], 12, txt=ten_khuon_hienthi, border=1, align='C')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
     pdf.cell(col_w[3], 12, txt=str(context['sl_khuon']), border=1, align='C')
-    pdf.cell(col_w[4], 12, txt=str(context['gia_khuon']), border=1, align='C')
+    pdf.cell(col_w[4], 12, txt=str(context['gia_khuon_str']), border=1, align='C')
     pdf.cell(col_w[5], 12, txt="Thép: ...", border=1, align='C')
     pdf.ln()
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(sum(col_w[:4]), 8, txt="Tổng", border=1, align='C')
-    pdf.cell(col_w[4], 8, txt=str(context['gia_khuon']), border=1, align='C')
+    pdf.cell(col_w[4], 8, txt=str(context['gia_khuon_str']), border=1, align='C')
     pdf.set_font(font_name, '', 9)
     pdf.cell(col_w[5], 8, txt="Bao gồm HĐ", border=1, align='C')
     pdf.ln(5)
@@ -289,11 +286,10 @@ def export_contract_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ PDF ĐÃ SỬA LỖI TRÀN CHỮ <---
-def export_quote_pdf(context):
+# ---> HÀM XUẤT BÁO GIÁ KHUÔN (TÁCH RIÊNG) <---
+def export_quote_khuon_pdf(context):
     pdf = FPDF()
     pdf.add_page()
-    
     try:
         pdf.add_font('ArialVN', '', 'arial.ttf', uni=True)
         pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True)
@@ -317,7 +313,7 @@ def export_quote_pdf(context):
     pdf.ln(10)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
-    pdf.cell(0, 10, txt="BÁO GIÁ KHUÔN MẪU VÀ SẢN PHẨM", ln=True, align='C')
+    pdf.cell(0, 10, txt="BÁO GIÁ KHUÔN MẪU", ln=True, align='C')
     pdf.ln(5)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
@@ -327,26 +323,17 @@ def export_quote_pdf(context):
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     col_w = [15, 85, 35, 40]
     pdf.cell(col_w[0], 8, txt="STT", border=1, align='C')
-    pdf.cell(col_w[1], 8, txt="Mô tả sản phẩm", border=1, align='C')
+    pdf.cell(col_w[1], 8, txt="Mô tả", border=1, align='C')
     pdf.cell(col_w[2], 8, txt="Hình ảnh", border=1, align='C')
     pdf.cell(col_w[3], 8, txt="Số lượng", border=1, align='C')
     pdf.ln()
 
-    # Rút gọn chuỗi nếu dài
     tk_hienthi = context['ten_khuon'] if len(context['ten_khuon']) <= 38 else context['ten_khuon'][:35] + "..."
-    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 38 else context['ten_san_pham'][:35] + "..."
-
     pdf.set_font(font_name, '', 11)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='L')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
     pdf.cell(col_w[3], 12, txt=f"{context['sl_khuon']} khuôn", border=1, align='C')
-    pdf.ln()
-    
-    pdf.cell(col_w[0], 12, txt="2", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
-    pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt="Cặp", border=1, align='C')
     pdf.ln()
 
     pdf.set_font(font_name, '', 10)
@@ -363,7 +350,7 @@ def export_quote_pdf(context):
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="Giá Khuôn:", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
-    pdf.multi_cell(0, 6, txt=f"- Giá hoàn thiện khuôn: {context['gia_khuon']} (Mẫu bóng)", align='L')
+    pdf.multi_cell(0, 6, txt=f"- Giá hoàn thiện khuôn: {context['gia_khuon_str']} (Mẫu bóng)", align='L')
     
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="Bảo hành khuôn:", ln=True, align='L')
@@ -372,11 +359,84 @@ def export_quote_pdf(context):
     pdf.ln(2)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+    pdf.cell(0, 6, txt="Thanh toán:", ln=True, align='L')
+    pdf.set_font(font_name, '', 11)
+    pdf.cell(0, 6, txt="- 50% sau khi ký báo giá hoặc ký hợp đồng", ln=True, align='L')
+    pdf.multi_cell(0, 6, txt="- 50% còn lại sau khi nhận mẫu thử hoàn chỉnh", align='L')
+    pdf.ln(10)
+    
+    pdf.set_font(font_name, '', 12)
+    pdf.cell(0, 6, txt="Xin chân thành cảm ơn sự tín nhiệm của quý khách hàng!", ln=True, align='C')
+
+    temp_filename = f"temp_bgk_{datetime.now().strftime('%H%M%S')}.pdf"
+    pdf.output(temp_filename)
+    with open(temp_filename, "rb") as f:
+        pdf_bytes = f.read()
+    if os.path.exists(temp_filename):
+        os.remove(temp_filename)
+    return pdf_bytes
+
+# ---> HÀM XUẤT BÁO GIÁ SẢN PHẨM (TÁCH RIÊNG) <---
+def export_quote_sp_pdf(context):
+    pdf = FPDF()
+    pdf.add_page()
+    try:
+        pdf.add_font('ArialVN', '', 'arial.ttf', uni=True)
+        pdf.add_font('ArialVN', 'B', 'arialbd.ttf', uni=True)
+        font_name = 'ArialVN'
+    except:
+        font_name = 'Arial'
+
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 24)
+    pdf.cell(0, 10, txt="WANCHI", ln=True, align='C')
+    pdf.set_font(font_name, '', 12)
+    pdf.cell(0, 6, txt="www.wanchi.vn", ln=True, align='C')
+    pdf.ln(5)
+
+    pdf.set_font(font_name, '', 10)
+    pdf.multi_cell(0, 5, txt="Văn Phòng: 445/87 Tân Hoà Đông P. Bình Trị Đông Q.Bình Tân.", align='L')
+    pdf.multi_cell(0, 5, txt="Nhà Máy: 775 Võ Hữu Lợi, Ấp 16, Xã Lê Minh Xuân, Huyện Bình Chánh, Thành phố Hồ Chí Minh", align='L')
+    pdf.cell(0, 5, txt="Điện Thoại: 0937572577. A Quang", ln=True, align='L')
+    
+    pdf.set_xy(10, 40)
+    pdf.cell(0, 5, txt=f"TP. HCM, ngày {context['ngay']} tháng {context['thang']} năm {context['nam']}", ln=True, align='R')
+    pdf.ln(10)
+
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
+    pdf.cell(0, 10, txt="BÁO GIÁ SẢN PHẨM", ln=True, align='C')
+    pdf.ln(5)
+
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+    pdf.multi_cell(0, 6, txt=f"Người Nhận: {context['ten_cong_ty_khach']} - {context['nguoi_dai_dien']}", align='L')
+    pdf.ln(2)
+
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
+    col_w = [15, 70, 30, 25, 35]
+    pdf.cell(col_w[0], 8, txt="STT", border=1, align='C')
+    pdf.cell(col_w[1], 8, txt="Mô tả sản phẩm", border=1, align='C')
+    pdf.cell(col_w[2], 8, txt="Hình ảnh", border=1, align='C')
+    pdf.cell(col_w[3], 8, txt="Số lượng", border=1, align='C')
+    pdf.cell(col_w[4], 8, txt="Đơn giá", border=1, align='C')
+    pdf.ln()
+
+    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 30 else context['ten_san_pham'][:27] + "..."
+    pdf.set_font(font_name, '', 11)
+    pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
+    pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
+    pdf.cell(col_w[2], 12, txt="", border=1, align='C')
+    pdf.cell(col_w[3], 12, txt=f"{context['sl_san_pham']} C", border=1, align='C')
+    pdf.cell(col_w[4], 12, txt=f"{context['gia_san_pham_str']} đ", border=1, align='C')
+    pdf.ln()
+
+    pdf.set_font(font_name, '', 10)
+    pdf.cell(0, 8, txt="Giá trên chưa bao gồm hóa đơn", ln=True, align='R')
+    pdf.ln(5)
+
+    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="Thông tin sản phẩm:", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
     pdf.multi_cell(0, 6, txt=f"- Chất liệu sản phẩm: {context['chat_lieu_nhua']}", align='L')
-    pdf.multi_cell(0, 6, txt=f"- {context['thoi_gian_giao']} ngày (không tính lễ, CN) kể từ nhận cọc và ký xác nhận bản vẽ.", align='L')
-    pdf.multi_cell(0, 6, txt="- Thời gian hợp đồng được tính khi ký hợp đồng", align='L')
+    pdf.multi_cell(0, 6, txt=f"- Thời gian hoàn thiện đơn hàng tùy theo số lượng đặt", align='L')
     pdf.ln(2)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
@@ -388,21 +448,14 @@ def export_quote_pdf(context):
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="Thanh toán:", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
-    pdf.cell(0, 6, txt="- 50% sau khi ký báo giá hoặc ký hợp đồng", ln=True, align='L')
-    pdf.multi_cell(0, 6, txt="- 50% còn lại sau khi nhận mẫu thử hoàn chỉnh", align='L')
-    pdf.ln(2)
-
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
-    pdf.cell(0, 6, txt="Bảo hành khuôn:", ln=True, align='L')
-    pdf.set_font(font_name, '', 11)
-    pdf.multi_cell(0, 6, txt="- 24 tháng hoặc 1.000.000 sản phẩm tùy theo điều kiện nào đến trước", align='L')
-    pdf.multi_cell(0, 6, txt="- Khuôn được bảo hành khi sản xuất và sử dụng tại cty", align='L')
+    pdf.cell(0, 6, txt="- Tạm ứng 50% khi đặt hàng", ln=True, align='L')
+    pdf.multi_cell(0, 6, txt="- 50% còn lại thanh toán trước khi giao hàng", align='L')
     pdf.ln(10)
     
     pdf.set_font(font_name, '', 12)
     pdf.cell(0, 6, txt="Xin chân thành cảm ơn sự tín nhiệm của quý khách hàng!", ln=True, align='C')
 
-    temp_filename = f"temp_bg_{datetime.now().strftime('%H%M%S')}.pdf"
+    temp_filename = f"temp_bgsp_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     with open(temp_filename, "rb") as f:
         pdf_bytes = f.read()
@@ -977,11 +1030,11 @@ elif st.session_state.current_tab_khuon == "E. Danh Sách & Quản Trị":
         st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
 
 # ------------------------------------------
-# MODULE H: BÁO GIÁ & HỢP ĐỒNG
+# MODULE H: BÁO GIÁ & HỢP ĐỒNG (ĐÃ TÁCH RIÊNG KHUÔN & SẢN PHẨM)
 # ------------------------------------------
 elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
     st.header("H. Báo Giá & Hợp Đồng Khuôn Mẫu (PDF)")
-    st.markdown("Nhập thông tin bên dưới để tự động tạo file **PDF** Báo giá và Hợp đồng.")
+    st.markdown("Hệ thống sẽ tự động tách thành **Báo Giá Khuôn**, **Báo Giá Sản Phẩm** và **Hợp Đồng** riêng biệt.")
     
     with st.form("form_bao_gia_hop_dong"):
         st.subheader("1. Thông Khách hàng (Bên A)")
@@ -1004,12 +1057,16 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
         sl_khuon = c8.number_input("Số lượng khuôn", min_value=1, value=1)
         gia_khuon = c9.number_input("Giá khuôn (VNĐ)", min_value=0, value=24000000, step=1000000)
         chat_lieu_nhua = c10.text_input("Chất liệu sản phẩm (nhựa)", value="Nhựa ABS")
+
+        c13, c14 = st.columns(2)
+        sl_san_pham = c13.number_input("Số lượng sản phẩm", min_value=1, value=1000)
+        gia_san_pham = c14.number_input("Đơn giá sản phẩm (VNĐ)", min_value=0, value=5000, step=100)
         
         st.markdown("---")
         st.subheader("3. Thông tin Hợp đồng / Điều khoản")
         c11, c12 = st.columns(2)
         ngay_lap = c11.date_input("Ngày lập", datetime.today())
-        thoi_gian_giao = c12.number_input("Thời gian giao mẫu (Ngày)", min_value=1, value=30)
+        thoi_gian_giao = c12.number_input("Thời gian giao mẫu khuôn (Ngày)", min_value=1, value=30)
         
         submitted = st.form_submit_button("Tạo File Báo Giá & Hợp Đồng (PDF)", use_container_width=True, type="primary")
 
@@ -1017,7 +1074,7 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
         if not ten_cong_ty_khach or not ten_khuon:
             st.error("⚠️ Vui lòng nhập Tên doanh nghiệp và Tên khuôn.")
         else:
-            with st.spinner("⏳ Đang tạo file PDF..."):
+            with st.spinner("⏳ Đang tách và tạo các file PDF..."):
                 context = {
                     "ngay": ngay_lap.strftime("%d"),
                     "thang": ngay_lap.strftime("%m"),
@@ -1030,35 +1087,53 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
                     "ten_khuon": ten_khuon,
                     "ten_san_pham": ten_san_pham,
                     "sl_khuon": sl_khuon,
-                    "gia_khuon": f"{gia_khuon:,.0f}".replace(",", "."),
+                    "gia_khuon_str": f"{gia_khuon:,.0f}".replace(",", "."),
+                    "sl_san_pham": f"{sl_san_pham:,.0f}".replace(",", "."),
+                    "gia_san_pham_str": f"{gia_san_pham:,.0f}".replace(",", "."),
                     "chat_lieu_nhua": chat_lieu_nhua,
                     "thoi_gian_giao": thoi_gian_giao
                 }
 
-                col_down1, col_down2 = st.columns(2)
+                col_down1, col_down2, col_down3 = st.columns(3)
 
-                # 1. XUẤT FILE HỢP ĐỒNG
+                # 1. XUẤT FILE HỢP ĐỒNG KHUÔN
                 try:
                     pdf_hd_bytes = export_contract_pdf(context)
-                    col_down1.success("✅ Đã tạo xong Hợp Đồng!")
+                    col_down1.success("✅ Hợp Đồng")
                     col_down1.download_button(
-                        label="⬇️ Tải xuống HỢP ĐỒNG (PDF)",
+                        label="⬇️ Tải HỢP ĐỒNG",
                         data=pdf_hd_bytes,
-                        file_name=f"HopDong_KhuonMau_{ten_cong_ty_khach}.pdf",
-                        mime="application/pdf"
+                        file_name=f"HopDong_Khuon_{ten_cong_ty_khach}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
                     )
                 except Exception as e:
-                    col_down1.error(f"Lỗi tạo Hợp Đồng PDF. Chi tiết: {e}")
+                    col_down1.error(f"Lỗi: {e}")
 
-                # 2. XUẤT FILE BÁO GIÁ
+                # 2. XUẤT FILE BÁO GIÁ KHUÔN
                 try:
-                    pdf_bg_bytes = export_quote_pdf(context)
-                    col_down2.success("✅ Đã tạo xong Báo Giá!")
+                    pdf_bgk_bytes = export_quote_khuon_pdf(context)
+                    col_down2.success("✅ Báo Giá Khuôn")
                     col_down2.download_button(
-                        label="⬇️ Tải xuống BÁO GIÁ (PDF)",
-                        data=pdf_bg_bytes,
-                        file_name=f"BaoGia_KhuonMau_{ten_cong_ty_khach}.pdf",
-                        mime="application/pdf"
+                        label="⬇️ Tải BÁO GIÁ KHUÔN",
+                        data=pdf_bgk_bytes,
+                        file_name=f"BaoGia_Khuon_{ten_cong_ty_khach}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
                     )
                 except Exception as e:
-                    col_down2.error(f"Lỗi tạo Báo Giá PDF. Chi tiết: {e}")
+                    col_down2.error(f"Lỗi: {e}")
+                    
+                # 3. XUẤT FILE BÁO GIÁ SẢN PHẨM
+                try:
+                    pdf_bgsp_bytes = export_quote_sp_pdf(context)
+                    col_down3.success("✅ Báo Giá Sản Phẩm")
+                    col_down3.download_button(
+                        label="⬇️ Tải BÁO GIÁ SẢN PHẨM",
+                        data=pdf_bgsp_bytes,
+                        file_name=f"BaoGia_SanPham_{ten_cong_ty_khach}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    col_down3.error(f"Lỗi: {e}")
