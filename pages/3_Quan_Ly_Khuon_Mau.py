@@ -155,7 +155,7 @@ def export_pdf(df, title):
     return pdf_bytes
 
 
-# ---> HÀM XUẤT HỢP ĐỒNG PDF ĐÃ SỬA LỖI TRÀN CHỮ <---
+# ---> HÀM XUẤT HỢP ĐỒNG PDF ĐÃ SỬA LỖI TRÀN CHỮ BẰNG ĐO CHIỀU RỘNG <---
 def export_contract_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -185,7 +185,6 @@ def export_contract_pdf(context):
     pdf.cell(0, 6, txt="1. Bên A (Bên đặt hàng):", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
     
-    # Ép dùng multi_cell cho tất cả thông tin đầu vào để tự động xuống dòng an toàn
     pdf.multi_cell(0, 6, txt=f"- Tên doanh nghiệp: {context['ten_cong_ty_khach']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Đại diện là Ông/Bà: {context['nguoi_dai_dien']}        Chức vụ: {context['chuc_vu']}", align='L')
     pdf.multi_cell(0, 6, txt=f"- Địa chỉ: {context['dia_chi_khach']}", align='L')
@@ -215,18 +214,25 @@ def export_contract_pdf(context):
     pdf.cell(col_w[5], 8, txt="Ghi chú", border=1, align='C')
     pdf.ln()
 
-    # Xử lý tự động cắt bớt chữ nếu tên khuôn quá dài
+    # Đo độ rộng tự động để gọt text tránh tràn cell
     pdf.set_font(font_name, '', 10)
+    tk_hienthi = str(context['ten_khuon'])
+    while pdf.get_string_width(tk_hienthi) > (col_w[1] - 3) and len(tk_hienthi) > 0:
+        tk_hienthi = tk_hienthi[:-1]
+
+    sl_hienthi = str(context['sl_khuon'])
+    while pdf.get_string_width(sl_hienthi) > (col_w[3] - 3) and len(sl_hienthi) > 0:
+        sl_hienthi = sl_hienthi[:-1]
+
+    gia_hienthi = str(context['gia_khuon_str'])
+    while pdf.get_string_width(gia_hienthi) > (col_w[4] - 3) and len(gia_hienthi) > 0:
+        gia_hienthi = gia_hienthi[:-1]
+
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
-    
-    ten_khuon_hienthi = context['ten_khuon']
-    if len(ten_khuon_hienthi) > 22:
-        ten_khuon_hienthi = ten_khuon_hienthi[:19] + "..."
-        
-    pdf.cell(col_w[1], 12, txt=ten_khuon_hienthi, border=1, align='C')
+    pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='C')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=str(context['sl_khuon']), border=1, align='C')
-    pdf.cell(col_w[4], 12, txt=str(context['gia_khuon_str']), border=1, align='C')
+    pdf.cell(col_w[3], 12, txt=sl_hienthi, border=1, align='C')
+    pdf.cell(col_w[4], 12, txt=gia_hienthi, border=1, align='C')
     pdf.cell(col_w[5], 12, txt="Thép: ...", border=1, align='C')
     pdf.ln()
 
@@ -289,7 +295,7 @@ def export_contract_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ KHUÔN ĐÃ SỬA LỖI TRÀN CHỮ <---
+# ---> HÀM XUẤT BÁO GIÁ KHUÔN ĐÃ SỬA LỖI BẰNG ĐO CHIỀU RỘNG <---
 def export_quote_khuon_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -331,13 +337,21 @@ def export_quote_khuon_pdf(context):
     pdf.cell(col_w[3], 8, txt="Số lượng", border=1, align='C')
     pdf.ln()
 
-    # Cắt ngắn chuỗi hơn nữa để tránh lỗi tràn khung khi không có khoảng trắng
-    tk_hienthi = context['ten_khuon'] if len(context['ten_khuon']) <= 28 else context['ten_khuon'][:25] + "..."
     pdf.set_font(font_name, '', 11)
+    
+    # Đo đạc và tự động gọt chữ cho vừa vặn bề ngang của cột
+    tk_hienthi = str(context['ten_khuon'])
+    while pdf.get_string_width(tk_hienthi) > (col_w[1] - 3) and len(tk_hienthi) > 0:
+        tk_hienthi = tk_hienthi[:-1]
+
+    sl_hienthi = f"{context['sl_khuon']} khuôn"
+    while pdf.get_string_width(sl_hienthi) > (col_w[3] - 3) and len(sl_hienthi) > 0:
+        sl_hienthi = sl_hienthi[:-1]
+
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='L')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=f"{context['sl_khuon']} khuôn", border=1, align='C')
+    pdf.cell(col_w[3], 12, txt=sl_hienthi, border=1, align='C')
     pdf.ln()
 
     pdf.set_font(font_name, '', 10)
@@ -380,7 +394,7 @@ def export_quote_khuon_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ SẢN PHẨM ĐÃ SỬA LỖI TRÀN CHỮ <---
+# ---> HÀM XUẤT BÁO GIÁ SẢN PHẨM ĐÃ SỬA LỖI BẰNG ĐO CHIỀU RỘNG <---
 def export_quote_sp_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -423,14 +437,26 @@ def export_quote_sp_pdf(context):
     pdf.cell(col_w[4], 8, txt="Đơn giá", border=1, align='C')
     pdf.ln()
 
-    # Cắt ngắn tên sản phẩm mạnh hơn để tránh tràn khung
-    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 25 else context['ten_san_pham'][:22] + "..."
     pdf.set_font(font_name, '', 11)
+    
+    # Đo đạc và tự động gọt chữ cho vừa vặn bề ngang của cột
+    tsp_hienthi = str(context['ten_san_pham'])
+    while pdf.get_string_width(tsp_hienthi) > (col_w[1] - 3) and len(tsp_hienthi) > 0:
+        tsp_hienthi = tsp_hienthi[:-1]
+
+    sl_hienthi = f"{context['sl_san_pham']} C"
+    while pdf.get_string_width(sl_hienthi) > (col_w[3] - 3) and len(sl_hienthi) > 0:
+        sl_hienthi = sl_hienthi[:-1]
+
+    gia_hienthi = f"{context['gia_san_pham_str']} đ"
+    while pdf.get_string_width(gia_hienthi) > (col_w[4] - 3) and len(gia_hienthi) > 0:
+        gia_hienthi = gia_hienthi[:-1]
+
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=f"{context['sl_san_pham']} C", border=1, align='C')
-    pdf.cell(col_w[4], 12, txt=f"{context['gia_san_pham_str']} đ", border=1, align='C')
+    pdf.cell(col_w[3], 12, txt=sl_hienthi, border=1, align='C')
+    pdf.cell(col_w[4], 12, txt=gia_hienthi, border=1, align='C')
     pdf.ln()
 
     pdf.set_font(font_name, '', 10)
