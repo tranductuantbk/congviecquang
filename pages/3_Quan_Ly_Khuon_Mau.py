@@ -105,6 +105,7 @@ def export_pdf(df, title):
         pdf.set_fill_color(220, 220, 220)
         for i, col in enumerate(df_export.columns):
             header_str = txt(col)
+            # Rút gọn text nếu quá dài cho cột
             while pdf.get_string_width(header_str) > (col_widths[i] - 1) and len(header_str) > 0:
                 header_str = header_str[:-1]
             pdf.cell(col_widths[i], 8, txt=header_str, border=1, fill=True, align='C')
@@ -222,21 +223,45 @@ def export_contract_pdf(context):
     pdf.cell(col_w[5], 8, txt=txt("Ghi chú"), border=1, align='C')
     pdf.ln()
 
+    # Sử dụng Multi-cell an toàn kết hợp lấy tọa độ để vẽ
     pdf.set_font(font_name, '', 10)
-    tk_hienthi = txt(context['ten_khuon'])
-    while pdf.get_string_width(tk_hienthi) > (col_w[1] - 3) and len(tk_hienthi) > 0: tk_hienthi = tk_hienthi[:-1]
-    sl_hienthi = txt(context['sl_khuon'])
-    while pdf.get_string_width(sl_hienthi) > (col_w[3] - 3) and len(sl_hienthi) > 0: sl_hienthi = sl_hienthi[:-1]
-    gia_hienthi = txt(context['gia_khuon_str'])
-    while pdf.get_string_width(gia_hienthi) > (col_w[4] - 3) and len(gia_hienthi) > 0: gia_hienthi = gia_hienthi[:-1]
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
+    
+    # 1. Tính toán số dòng thực tế sẽ bị bẻ của cột Mô Tả (để định hình chiều cao hàng)
+    pdf.set_xy(x_start + col_w[0], y_start)
+    txt_khuon = txt(context['ten_khuon'])
+    # Dùng hàm multi_cell nháp với split_only (nếu fpdf có) hoặc mặc định tính nháp
+    # Thay vì dùng split_only không được hỗ trợ trong một số version cũ, ta sẽ vẽ thật bằng rect và đặt Y
+    lines = max(1, int(pdf.get_string_width(txt_khuon) / col_w[1]) + 1)
+    line_height = lines * 6 if lines > 1 else 12 # Chiều cao tối thiểu 12mm
+    
+    # Reset về điểm đầu
+    pdf.set_xy(x_start, y_start)
+    
+    # Ô 1: STT
+    pdf.cell(col_w[0], line_height, txt="1", border=1, align='C')
+    
+    # Ô 2: Mô tả (Dùng Multi-cell)
+    pdf.rect(x_start + col_w[0], y_start, col_w[1], line_height) # Vẽ khung cố định
+    pdf.set_xy(x_start + col_w[0], y_start + (line_height - lines*6)/2) # Canh giữa theo Y
+    pdf.multi_cell(col_w[1], 6, txt=txt_khuon, align='C')
+    
+    # Các ô tiếp theo phải bám theo X và Y gốc
+    pdf.set_xy(x_start + col_w[0] + col_w[1], y_start)
+    
+    # Xử lý tự động rút gọn để không tràn cell
+    sl_hienthi = txt(str(context['sl_khuon']))
+    while pdf.get_string_width(sl_hienthi) > (col_w[3] - 2) and len(sl_hienthi) > 0: sl_hienthi = sl_hienthi[:-1]
+    
+    gia_hienthi = txt(str(context['gia_khuon_str']))
+    while pdf.get_string_width(gia_hienthi) > (col_w[4] - 2) and len(gia_hienthi) > 0: gia_hienthi = gia_hienthi[:-1]
 
-    pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='C')
-    pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=sl_hienthi, border=1, align='C')
-    pdf.cell(col_w[4], 12, txt=gia_hienthi, border=1, align='C')
-    pdf.cell(col_w[5], 12, txt=txt("Thép: ..."), border=1, align='C')
-    pdf.ln()
+    pdf.cell(col_w[2], line_height, txt="", border=1, align='C')
+    pdf.cell(col_w[3], line_height, txt=sl_hienthi, border=1, align='C')
+    pdf.cell(col_w[4], line_height, txt=gia_hienthi, border=1, align='C')
+    pdf.cell(col_w[5], line_height, txt=txt("Thép: ..."), border=1, align='C')
+    pdf.ln(line_height)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(sum(col_w[:4]), 8, txt=txt("Tổng"), border=1, align='C')
@@ -297,7 +322,7 @@ def export_contract_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ (GỘP KHUÔN + SẢN PHẨM NHƯ FILE WORD) <---
+# ---> HÀM XUẤT BÁO GIÁ (GỘP KHUÔN + SẢN PHẨM) SỬA LỖI MULTI-CELL AN TOÀN <---
 def export_combined_quote_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -346,25 +371,51 @@ def export_combined_quote_pdf(context):
 
     pdf.set_font(font_name, '', 11)
     
-    # 1. Dòng Khuôn
-    tk_hienthi = txt(context['ten_khuon'])
-    while pdf.get_string_width(tk_hienthi) > (col_w[1] - 4) and len(tk_hienthi) > 0: tk_hienthi = tk_hienthi[:-1]
+    # ================= 1. Dòng Khuôn =================
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
+    txt_khuon = txt(context['ten_khuon'])
     
-    pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='L')
-    pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=txt(f"{context['sl_khuon']} khuôn"), border=1, align='C')
-    pdf.ln()
-    
-    # 2. Dòng Sản phẩm
-    tsp_hienthi = txt(context['ten_san_pham'])
-    while pdf.get_string_width(tsp_hienthi) > (col_w[1] - 4) and len(tsp_hienthi) > 0: tsp_hienthi = tsp_hienthi[:-1]
+    # Tính số dòng ngắt (thô)
+    lines_k = max(1, int(pdf.get_string_width(txt_khuon) / col_w[1]) + 1)
+    line_h_k = lines_k * 6 if lines_k > 1 else 12
 
-    pdf.cell(col_w[0], 12, txt="2", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
-    pdf.cell(col_w[2], 12, txt="", border=1, align='C')
-    pdf.cell(col_w[3], 12, txt=txt("Cặp/Cái"), border=1, align='C')
-    pdf.ln()
+    pdf.cell(col_w[0], line_h_k, txt="1", border=1, align='C')
+    
+    # Ô Mô tả Khuôn
+    pdf.rect(x_start + col_w[0], y_start, col_w[1], line_h_k)
+    pdf.set_xy(x_start + col_w[0], y_start + (line_h_k - lines_k*6)/2)
+    pdf.multi_cell(col_w[1], 6, txt=txt_khuon, align='L')
+    
+    # Ô Hình và SL Khuôn
+    pdf.set_xy(x_start + col_w[0] + col_w[1], y_start)
+    pdf.cell(col_w[2], line_h_k, txt="", border=1, align='C')
+    
+    slk_hienthi = txt(f"{context['sl_khuon']} khuôn")
+    while pdf.get_string_width(slk_hienthi) > (col_w[3] - 2) and len(slk_hienthi) > 0: slk_hienthi = slk_hienthi[:-1]
+    pdf.cell(col_w[3], line_h_k, txt=slk_hienthi, border=1, align='C')
+    pdf.ln(line_h_k)
+    
+    # ================= 2. Dòng Sản phẩm =================
+    x_start2 = pdf.get_x()
+    y_start2 = pdf.get_y()
+    txt_sp = txt(context['ten_san_pham'])
+    
+    lines_sp = max(1, int(pdf.get_string_width(txt_sp) / col_w[1]) + 1)
+    line_h_sp = lines_sp * 6 if lines_sp > 1 else 12
+
+    pdf.cell(col_w[0], line_h_sp, txt="2", border=1, align='C')
+    
+    # Ô Mô tả Sản Phẩm
+    pdf.rect(x_start2 + col_w[0], y_start2, col_w[1], line_h_sp)
+    pdf.set_xy(x_start2 + col_w[0], y_start2 + (line_h_sp - lines_sp*6)/2)
+    pdf.multi_cell(col_w[1], 6, txt=txt_sp, align='L')
+    
+    # Ô Hình và SL SP
+    pdf.set_xy(x_start2 + col_w[0] + col_w[1], y_start2)
+    pdf.cell(col_w[2], line_h_sp, txt="", border=1, align='C')
+    pdf.cell(col_w[3], line_h_sp, txt=txt("Cặp/Cái"), border=1, align='C')
+    pdf.ln(line_h_sp)
 
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=txt("Giá trên chưa bao gồm hóa đơn"), ln=True, align='R')
