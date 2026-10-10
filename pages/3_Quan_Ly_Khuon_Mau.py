@@ -289,7 +289,7 @@ def export_contract_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ KHUÔN (TÁCH RIÊNG) <---
+# ---> HÀM XUẤT BÁO GIÁ KHUÔN ĐÃ SỬA LỖI TRÀN CHỮ <---
 def export_quote_khuon_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -331,7 +331,8 @@ def export_quote_khuon_pdf(context):
     pdf.cell(col_w[3], 8, txt="Số lượng", border=1, align='C')
     pdf.ln()
 
-    tk_hienthi = context['ten_khuon'] if len(context['ten_khuon']) <= 38 else context['ten_khuon'][:35] + "..."
+    # Cắt ngắn chuỗi hơn nữa để tránh lỗi tràn khung khi không có khoảng trắng
+    tk_hienthi = context['ten_khuon'] if len(context['ten_khuon']) <= 28 else context['ten_khuon'][:25] + "..."
     pdf.set_font(font_name, '', 11)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='L')
@@ -379,7 +380,7 @@ def export_quote_khuon_pdf(context):
         os.remove(temp_filename)
     return pdf_bytes
 
-# ---> HÀM XUẤT BÁO GIÁ SẢN PHẨM (TÁCH RIÊNG) <---
+# ---> HÀM XUẤT BÁO GIÁ SẢN PHẨM ĐÃ SỬA LỖI TRÀN CHỮ <---
 def export_quote_sp_pdf(context):
     pdf = FPDF()
     pdf.add_page()
@@ -422,7 +423,8 @@ def export_quote_sp_pdf(context):
     pdf.cell(col_w[4], 8, txt="Đơn giá", border=1, align='C')
     pdf.ln()
 
-    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 30 else context['ten_san_pham'][:27] + "..."
+    # Cắt ngắn tên sản phẩm mạnh hơn để tránh tràn khung
+    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 25 else context['ten_san_pham'][:22] + "..."
     pdf.set_font(font_name, '', 11)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
     pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
