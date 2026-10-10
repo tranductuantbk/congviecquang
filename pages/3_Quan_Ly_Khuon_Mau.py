@@ -154,6 +154,7 @@ def export_pdf(df, title):
         
     return pdf_bytes
 
+
 # ---> HÀM XUẤT HỢP ĐỒNG PDF <---
 def export_contract_pdf(context):
     pdf = FPDF()
@@ -166,34 +167,30 @@ def export_contract_pdf(context):
     except:
         font_name = 'Arial'
 
-    # Tiêu đề Quốc hiệu
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
     pdf.cell(0, 6, txt="CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", ln=True, align='C')
     pdf.cell(0, 6, txt="Độc lập - Tự do - Hạnh phúc", ln=True, align='C')
     pdf.cell(0, 6, txt="----------***---------", ln=True, align='C')
     pdf.ln(5)
     
-    # Tên Hợp đồng
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     pdf.cell(0, 10, txt="HỢP ĐỒNG SẢN XUẤT KHUÔN MẪU", ln=True, align='C')
     pdf.ln(2)
     
-    # Ngày tháng
     pdf.set_font(font_name, '', 11)
     pdf.cell(0, 6, txt=f"Hôm nay, ngày {context['ngay']} tháng {context['thang']} năm {context['nam']}, các bên trong hợp đồng gồm:", ln=True, align='L')
     pdf.ln(2)
     
-    # Bên A
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="1. Bên A (Bên đặt hàng):", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
-    pdf.cell(0, 6, txt=f"- Tên doanh nghiệp: {context['ten_cong_ty_khach']}", ln=True, align='L')
+    # Rút gọn các đoạn chữ dài bằng multi_cell để tránh lỗi tràn dòng
+    pdf.multi_cell(0, 6, txt=f"- Tên doanh nghiệp: {context['ten_cong_ty_khach']}", align='L')
     pdf.cell(0, 6, txt=f"- Đại diện là Ông/Bà: {context['nguoi_dai_dien']}        Chức vụ: {context['chuc_vu']}", ln=True, align='L')
-    pdf.cell(0, 6, txt=f"- Địa chỉ: {context['dia_chi_khach']}", ln=True, align='L')
+    pdf.multi_cell(0, 6, txt=f"- Địa chỉ: {context['dia_chi_khach']}", align='L')
     pdf.cell(0, 6, txt=f"- Điện thoại: {context['sdt_khach']}", ln=True, align='L')
     pdf.ln(2)
 
-    # Bên B
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="2. Bên B (Bên sản xuất khuôn mẫu):", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
@@ -207,26 +204,34 @@ def export_contract_pdf(context):
     pdf.cell(0, 6, txt="Hai bên thống nhất thỏa thuận lập hợp đồng với nội dung như sau:", ln=True, align='L')
     pdf.ln(2)
 
-    # Bảng chi tiết
+    # Đã bóp lại độ rộng các ô bảng Hợp đồng để không bị tràn khổ giấy (Tổng = 175 thay vì 190)
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
-    col_w = [15, 60, 30, 20, 35, 30]
+    col_w = [15, 50, 30, 20, 30, 30]
     pdf.cell(col_w[0], 8, txt="STT", border=1, align='C')
-    pdf.cell(col_w[1], 8, txt="Mô tả sản phẩm", border=1, align='C')
+    pdf.cell(col_w[1], 8, txt="Mô tả", border=1, align='C')
     pdf.cell(col_w[2], 8, txt="Hình ảnh", border=1, align='C')
     pdf.cell(col_w[3], 8, txt="SL", border=1, align='C')
-    pdf.cell(col_w[4], 8, txt="Giá 1 đơn vị", border=1, align='C')
+    pdf.cell(col_w[4], 8, txt="Đơn giá", border=1, align='C')
     pdf.cell(col_w[5], 8, txt="Ghi chú", border=1, align='C')
     pdf.ln()
 
-    pdf.set_font(font_name, '', 11)
+    # Dữ liệu bảng
+    pdf.set_font(font_name, '', 10)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=context['ten_khuon'], border=1, align='C')
+    
+    # Rút ngắn nội dung nếu tên khuôn quá dài
+    ten_khuon_hienthi = context['ten_khuon']
+    if len(ten_khuon_hienthi) > 25:
+        ten_khuon_hienthi = ten_khuon_hienthi[:22] + "..."
+        
+    pdf.cell(col_w[1], 12, txt=ten_khuon_hienthi, border=1, align='C')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
     pdf.cell(col_w[3], 12, txt=str(context['sl_khuon']), border=1, align='C')
     pdf.cell(col_w[4], 12, txt=str(context['gia_khuon']), border=1, align='C')
     pdf.cell(col_w[5], 12, txt="Thép: ...", border=1, align='C')
     pdf.ln()
 
+    # Cột Tổng
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(sum(col_w[:4]), 8, txt="Tổng", border=1, align='C')
     pdf.cell(col_w[4], 8, txt=str(context['gia_khuon']), border=1, align='C')
@@ -234,12 +239,11 @@ def export_contract_pdf(context):
     pdf.cell(col_w[5], 8, txt="Bao gồm HĐ", border=1, align='C')
     pdf.ln(5)
 
-    # Các điều khoản
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 8, txt="ĐIỀU 1: BẢNG KÊ CHI TIẾT KHUÔN MẪU NHƯ SAU", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
     pdf.cell(0, 6, txt="Thời gian giao mẫu thử và yêu cầu kỹ thuật", ln=True, align='L')
-    pdf.cell(0, 6, txt=f"- Thời gian giao mẫu: {context['thoi_gian_giao']} ngày (không tính Lễ, CN) kể từ ngày nhận đặt cọc.", ln=True, align='L')
+    pdf.cell(0, 6, txt=f"- Thời gian giao mẫu: {context['thoi_gian_giao']} ngày (không tính Lễ, CN) kể từ ngày nhận cọc.", ln=True, align='L')
     pdf.cell(0, 6, txt="- Yêu cầu kỹ thuật: Theo bản vẽ", ln=True, align='L')
     pdf.cell(0, 6, txt="- Vật tư làm mẫu: Theo bản vẽ hoặc tương đương", ln=True, align='L')
     pdf.ln(2)
@@ -275,10 +279,10 @@ def export_contract_pdf(context):
     pdf.cell(0, 6, txt="Hợp đồng này được làm thành 2 bản có giá trị như nhau, mỗi bên giữ 1 bản.", ln=True, align='L')
     pdf.ln(10)
     
-    # Ký tên
+    # Ký tên đã thu hẹp lại khoảng trống để tránh báo lỗi width
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
-    pdf.cell(95, 6, txt="ĐẠI DIỆN BÊN A", align='C')
-    pdf.cell(95, 6, txt="ĐẠI DIỆN BÊN B", ln=True, align='C')
+    pdf.cell(85, 6, txt="ĐẠI DIỆN BÊN A", align='C')
+    pdf.cell(85, 6, txt="ĐẠI DIỆN BÊN B", ln=True, align='C')
 
     temp_filename = f"temp_hd_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
@@ -300,7 +304,6 @@ def export_quote_pdf(context):
     except:
         font_name = 'Arial'
 
-    # Header WANCHI
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 24)
     pdf.cell(0, 10, txt="WANCHI", ln=True, align='C')
     pdf.set_font(font_name, '', 12)
@@ -321,36 +324,41 @@ def export_quote_pdf(context):
     pdf.ln(5)
 
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
-    pdf.cell(0, 6, txt=f"Người Nhận: {context['ten_cong_ty_khach']} - {context['nguoi_dai_dien']}", ln=True, align='L')
+    # Dùng multi_cell thay cell để tránh lỗi khi tên công ty quá dài
+    pdf.multi_cell(0, 6, txt=f"Người Nhận: {context['ten_cong_ty_khach']} - {context['nguoi_dai_dien']}", align='L')
     pdf.ln(2)
 
-    # Bảng chi tiết
+    # Đã bóp độ rộng các ô lại (Tổng = 175)
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
-    col_w = [20, 90, 40, 40]
+    col_w = [20, 80, 35, 40]
     pdf.cell(col_w[0], 8, txt="STT", border=1, align='C')
     pdf.cell(col_w[1], 8, txt="Mô tả sản phẩm", border=1, align='C')
     pdf.cell(col_w[2], 8, txt="Hình ảnh", border=1, align='C')
     pdf.cell(col_w[3], 8, txt="Số lượng", border=1, align='C')
     pdf.ln()
 
+    # Rút gọn chuỗi nếu dài
+    tk_hienthi = context['ten_khuon'] if len(context['ten_khuon']) <= 40 else context['ten_khuon'][:37] + "..."
+    tsp_hienthi = context['ten_san_pham'] if len(context['ten_san_pham']) <= 40 else context['ten_san_pham'][:37] + "..."
+
     pdf.set_font(font_name, '', 11)
     pdf.cell(col_w[0], 12, txt="1", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=context['ten_khuon'], border=1, align='L')
+    pdf.cell(col_w[1], 12, txt=tk_hienthi, border=1, align='L')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
     pdf.cell(col_w[3], 12, txt=f"{context['sl_khuon']} khuôn", border=1, align='C')
     pdf.ln()
     
     pdf.cell(col_w[0], 12, txt="2", border=1, align='C')
-    pdf.cell(col_w[1], 12, txt=context['ten_san_pham'], border=1, align='L')
+    pdf.cell(col_w[1], 12, txt=tsp_hienthi, border=1, align='L')
     pdf.cell(col_w[2], 12, txt="", border=1, align='C')
     pdf.cell(col_w[3], 12, txt="Cặp", border=1, align='C')
     pdf.ln()
 
-    pdf.set_font(font_name, 'I' if font_name == 'ArialVN' else '', 10)
+    # ĐÃ SỬA LỖI FONT IN NGHIÊNG BẰNG CÁCH CHỈ SỬ DỤNG FONT THƯỜNG
+    pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt="Giá trên chưa bao gồm hóa đơn", ln=True, align='R')
     pdf.ln(5)
 
-    # Chi tiết kỹ thuật
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 11)
     pdf.cell(0, 6, txt="Thông Tin Khuôn:", ln=True, align='L')
     pdf.set_font(font_name, '', 11)
@@ -397,7 +405,8 @@ def export_quote_pdf(context):
     pdf.cell(0, 6, txt="- Khuôn được bảo hành khi sản xuất và sử dụng tại cty", ln=True, align='L')
     pdf.ln(10)
     
-    pdf.set_font(font_name, 'I' if font_name == 'ArialVN' else '', 12)
+    # ĐÃ SỬA LỖI FONT IN NGHIÊNG
+    pdf.set_font(font_name, '', 12)
     pdf.cell(0, 6, txt="Xin chân thành cảm ơn sự tín nhiệm của quý khách hàng!", ln=True, align='C')
 
     temp_filename = f"temp_bg_{datetime.now().strftime('%H%M%S')}.pdf"
@@ -982,7 +991,7 @@ elif st.session_state.current_tab_khuon == "H. Báo Giá & Hợp Đồng":
     st.markdown("Nhập thông tin bên dưới để tự động tạo file **PDF** Báo giá và Hợp đồng.")
     
     with st.form("form_bao_gia_hop_dong"):
-        st.subheader("1. Thông tin Khách hàng (Bên A)")
+        st.subheader("1. Thông Khách hàng (Bên A)")
         c1, c2 = st.columns(2)
         ten_cong_ty_khach = c1.text_input("Tên doanh nghiệp / Khách hàng")
         dia_chi_khach = c2.text_input("Địa chỉ")
