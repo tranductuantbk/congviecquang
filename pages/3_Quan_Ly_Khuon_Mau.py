@@ -26,7 +26,30 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# ---> HÀM XUẤT PDF BÁO CÁO CƠ BẢN <---
+# ==========================================
+# KHỞI TẠO THƯ VIỆN CHUYỂN PDF SANG ẢNH
+# ==========================================
+try:
+    import fitz  # PyMuPDF
+    HAS_FITZ = True
+except ImportError:
+    HAS_FITZ = False
+
+def convert_pdf_to_png(pdf_bytes):
+    """Hàm chuyển byte PDF thành byte Ảnh PNG độ nét cao"""
+    if not HAS_FITZ:
+        st.error("⚠️ Hệ thống thiếu thư viện 'PyMuPDF' để xuất ảnh. Vui lòng chạy lệnh: pip install PyMuPDF")
+        return None
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = doc.load_page(0) 
+        pix = page.get_pixmap(dpi=200) 
+        return pix.tobytes("png")
+    except Exception as e:
+        st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
+        return None
+
+# ---> HÀM XUẤT PDF (BẢN VẼ LÕI ĐỂ CHUYỂN ẢNH) <---
 def export_pdf(df, title):
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
@@ -43,10 +66,10 @@ def export_pdf(df, title):
         font_name = 'Arial'
         st.warning("⚠️ Không tìm thấy file 'arial.ttf'. Hệ thống sẽ xuất PDF không dấu để tránh lỗi.")
 
-    # Hàm bọc an toàn tránh sập hệ thống khi thiếu font
     def txt(s):
         return remove_accents(str(s)) if font_name == 'Arial' else str(s)
 
+    # --- XỬ LÝ LOGO VÀ ĐỊA CHỈ ---
     logo_path = "logo.png" 
     try:
         if os.path.exists(logo_path):
@@ -57,26 +80,23 @@ def export_pdf(df, title):
     except:
         start_x = 10
 
-    pdf.set_xy(start_x, 10)
-    pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 14)
-    pdf.cell(0, 6, txt=txt("WANCHI"), ln=True, align='L')
-    
-    pdf.set_x(start_x)
+    pdf.set_xy(start_x, 15)
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 5, txt=txt("775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM"), ln=True, align='L')
     
     pdf.set_x(start_x)
-    pdf.cell(0, 5, txt=txt("SĐT: 0902.580.828 - 0937.572.577"), ln=True, align='L')
-    
-    pdf.ln(10)
+    pdf.cell(0, 5, txt=txt("SĐT: 0937.572.577"), ln=True, align='L')
+    pdf.ln(12)
 
+    # --- IN TIÊU ĐỀ (HỖ TRỢ XUỐNG DÒNG) ---
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
-    pdf.cell(0, 10, txt=txt(title.upper()), ln=True, align='C')
+    pdf.multi_cell(0, 8, txt=txt(title.upper()), align='C')
     
     pdf.set_font(font_name, '', 10)
-    pdf.cell(0, 8, txt=txt(f"Ngày: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
+    pdf.cell(0, 8, txt=txt(f"Ngày lập: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
     pdf.ln(5)
 
+    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
@@ -85,68 +105,110 @@ def export_pdf(df, title):
         for col in df_export.columns:
             max_w = pdf.get_string_width(txt(col)) + 4 
             for item in df_export[col]:
-                val_str = str(item)
-                if pd.notnull(item) and str(item).strip() != "":
-                    if col in num_cols:
-                        try:
-                            val_str = f"{float(item):,.0f}".replace(",", ".")
-                        except: pass
-                item_w = pdf.get_string_width(txt(val_str)) + 4
-                if item_w > max_w:
-                    max_w = item_w
+                val_str = str(item) if pd.notnull(item) else ""
+                if col in num_cols and val_str.strip() != "":
+                    try: val_str = f"{float(item):,.0f}".replace(",", ".")
+                    except: pass
+                
+                # Quét theo từng dòng văn bản
+                for para in val_str.split('\n'):
+                    item_w = pdf.get_string_width(txt(para)) + 4
+                    if item_w > max_w:
+                        max_w = item_w
+            
+            # Cấp diện tích tối đa cho các cột chứa text dài để nó tự động xuống dòng
+            if col in ["Ghi chú", "Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Đơn vị gia công"]:
+                if max_w > 65: max_w = 65
+            elif max_w > 75: max_w = 75
+                
             col_widths.append(max_w)
         
+        # Bóp lề nếu tràn trang A4 (277mm Landscape)
         total_w = sum(col_widths)
-        if total_w > 0:
+        if total_w > 277:
             scale = 277 / total_w
             col_widths = [w * scale for w in col_widths]
 
-        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
-        pdf.set_fill_color(220, 220, 220)
-        for i, col in enumerate(df_export.columns):
-            header_str = txt(col)
-            while pdf.get_string_width(header_str) > (col_widths[i] - 1) and len(header_str) > 0:
-                header_str = header_str[:-1]
-            pdf.cell(col_widths[i], 8, txt=header_str, border=1, fill=True, align='C')
-        pdf.ln()
-        
-        pdf.set_font(font_name, '', 8)
         sum_tong_tien = 0 
         
-        for _, row in df_export.iterrows():
-            for i, (col_name, item) in enumerate(row.items()):
-                val_str = str(item) if pd.notnull(item) else ""
-                align_col = 'L'
+        # Hàm vẽ 1 hàng (hỗ trợ kéo giãn chiều cao và xuống dòng)
+        def draw_row(row_data, is_header=False, is_footer=False):
+            line_h = 6 if is_header or is_footer else 5
+            max_lines = 1
+            # 1. Tính toán chiều cao cần thiết cho dòng này
+            for i, val in enumerate(row_data):
+                cw = col_widths[i]
+                lines = 1
+                curr_w = 0
+                for para in val.split('\n'):
+                    words = para.split(' ')
+                    for w in words:
+                        ww = pdf.get_string_width(w + ' ')
+                        if curr_w + ww > cw - 2:
+                            lines += 1
+                            curr_w = ww
+                        else:
+                            curr_w += ww
+                if lines > max_lines: max_lines = lines
                 
-                if col_name in num_cols and str(item).strip() != "":
-                    try:
+            row_height = max_lines * line_h
+            if pdf.get_y() + row_height > 190:
+                pdf.add_page()
+                
+            start_y = pdf.get_y()
+            # 2. Bắt đầu vẽ nội dung từng ô
+            for i, val in enumerate(row_data):
+                start_x = pdf.get_x()
+                align_col = 'C' if is_header else ('R' if df_export.columns[i] in num_cols else 'L')
+                if is_footer and i == len(df_export.columns) - 2: align_col = 'R'
+                
+                if is_header:
+                    pdf.set_fill_color(220, 220, 220)
+                    pdf.rect(start_x, start_y, col_widths[i], row_height, style='DF')
+                elif is_footer:
+                    pdf.set_fill_color(240, 240, 240)
+                    pdf.rect(start_x, start_y, col_widths[i], row_height, style='DF')
+                else:
+                    pdf.rect(start_x, start_y, col_widths[i], row_height)
+                    
+                pdf.multi_cell(col_widths[i], line_h, val, border=0, align=align_col)
+                pdf.set_xy(start_x + col_widths[i], start_y)
+                
+            pdf.set_y(start_y + row_height)
+
+        # Vẽ Dòng Header
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
+        headers = [txt(col) for col in df_export.columns]
+        draw_row(headers, is_header=True)
+        
+        # Vẽ Các Dòng Dữ Liệu
+        pdf.set_font(font_name, '', 8)
+        for _, row in df_export.iterrows():
+            row_data = []
+            for col_name, item in row.items():
+                val_str = str(item) if pd.notnull(item) else ""
+                if col_name in num_cols and val_str.strip() != "":
+                    try: 
                         val = float(item)
                         val_str = f"{val:,.0f}".replace(",", ".")
-                        align_col = 'R'
                         if col_name in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]:
                             sum_tong_tien += val
                     except: pass
-                
-                val_str = txt(val_str)
-                while pdf.get_string_width(val_str) > (col_widths[i] - 1) and len(val_str) > 0:
-                    val_str = val_str[:-1]
-
-                pdf.cell(col_widths[i], 8, txt=val_str, border=1, align=align_col)
-            pdf.ln()
+                row_data.append(txt(val_str))
+            draw_row(row_data)
             
+        # Vẽ Dòng Tổng Kết Cuối
         if any(c in df_export.columns for c in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]):
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
-            pdf.set_fill_color(240, 240, 240)
-            
+            footer_data = []
             for i, col in enumerate(df_export.columns):
                 if col in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]:
-                    tong_str = txt(f"{sum_tong_tien:,.0f}".replace(",", "."))
-                    pdf.cell(col_widths[i], 8, txt=tong_str, border=1, fill=True, align='R')
-                elif i == len(df_export.columns) - 2: 
-                    pdf.cell(col_widths[i], 8, txt=txt("TỔNG CỘNG:"), border=1, fill=True, align='R')
+                    footer_data.append(txt(f"{sum_tong_tien:,.0f}".replace(",", ".")))
+                elif i == len(df_export.columns) - 2:
+                    footer_data.append(txt("TỔNG CỘNG:"))
                 else:
-                    pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
-            pdf.ln()
+                    footer_data.append("")
+            draw_row(footer_data, is_footer=True)
             
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
@@ -384,15 +446,19 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
         st.rerun()
         
     st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo PDF")
+    st.subheader("📥 Xuất Báo Cáo ẢNH NÉT CAO")
     col_pdf1, col_pdf2 = st.columns([1, 2])
-    filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_a")
+    filter_pdf_a = col_pdf1.selectbox("Chọn Mã khuôn để xuất Ảnh:", ["Tất cả"] + list_molds_master, key="pdf_a")
     
-    if st.button("Tạo file PDF (Module A)"):
-        with st.spinner("Đang trích xuất file PDF..."):
+    if st.button("Tạo file ẢNH (Module A)"):
+        with st.spinner("Đang trích xuất file ẢNH..."):
             df_export_a = edited_A if filter_pdf_a == "Tất cả" else edited_A[edited_A["Mã khuôn"] == filter_pdf_a]
-            pdf_a = export_pdf(df_export_a, f"BÁO CÁO NGUYÊN VẬT LIỆU KHUÔN {filter_pdf_a}")
-        col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_a, f"WANCHI_NVL_{filter_pdf_a}.pdf", "application/pdf")
+            title_a = f"BÁO CÁO NGUYÊN VẬT LIỆU\nMÃ KHUÔN: {filter_pdf_a}" if filter_pdf_a != "Tất cả" else "BÁO CÁO NGUYÊN VẬT LIỆU TỔNG HỢP"
+            pdf_a = export_pdf(df_export_a, title_a)
+            st.session_state['img_a'] = convert_pdf_to_png(pdf_a)
+            
+    if st.session_state.get('img_a'):
+        col_pdf2.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_a'], f"WANCHI_NVL_{filter_pdf_a}.png", "image/png", type="primary")
 
 
 # ------------------------------------------
@@ -443,15 +509,19 @@ elif st.session_state.current_tab == "B. Gia Công":
         st.rerun()
 
     st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo PDF")
+    st.subheader("📥 Xuất Báo Cáo ẢNH NÉT CAO")
     col_pdf3, col_pdf4 = st.columns([1, 2])
-    filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_b")
+    filter_pdf_b = col_pdf3.selectbox("Chọn Mã khuôn để xuất Ảnh:", ["Tất cả"] + list_molds_master, key="pdf_b")
     
-    if st.button("Tạo file PDF (Module B)"):
-        with st.spinner("Đang trích xuất file PDF..."):
+    if st.button("Tạo file ẢNH (Module B)"):
+        with st.spinner("Đang trích xuất file ẢNH..."):
             df_export_b = edited_B if filter_pdf_b == "Tất cả" else edited_B[edited_B["Mã khuôn"] == filter_pdf_b]
-            pdf_b = export_pdf(df_export_b, f"BÁO CÁO CHI PHÍ GIA CÔNG KHUÔN {filter_pdf_b}")
-        col_pdf4.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_b, f"WANCHI_GiaCong_{filter_pdf_b}.pdf", "application/pdf")
+            title_b = f"BÁO CÁO CHI PHÍ GIA CÔNG\nMÃ KHUÔN: {filter_pdf_b}" if filter_pdf_b != "Tất cả" else "BÁO CÁO GIA CÔNG TỔNG HỢP"
+            pdf_b = export_pdf(df_export_b, title_b)
+            st.session_state['img_b'] = convert_pdf_to_png(pdf_b)
+            
+    if st.session_state.get('img_b'):
+        col_pdf4.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_b'], f"WANCHI_GiaCong_{filter_pdf_b}.png", "image/png", type="primary")
 
 
 # ------------------------------------------
@@ -490,15 +560,19 @@ elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
         st.rerun()
 
     st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo PDF")
+    st.subheader("📥 Xuất Báo Cáo ẢNH NÉT CAO")
     col_pdf5, col_pdf6 = st.columns([1, 2])
-    filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_c")
+    filter_pdf_c = col_pdf5.selectbox("Chọn Mã khuôn để xuất Ảnh:", ["Tất cả"] + list_molds_master, key="pdf_c")
     
-    if st.button("Tạo file PDF (Module C)"):
-        with st.spinner("Đang trích xuất file PDF..."):
+    if st.button("Tạo file ẢNH (Module C)"):
+        with st.spinner("Đang trích xuất file ẢNH..."):
             df_export_c = edited_C if filter_pdf_c == "Tất cả" else edited_C[edited_C["Mã khuôn"] == filter_pdf_c]
-            pdf_c = export_pdf(df_export_c, f"BÁO CÁO VẬT TƯ KHUÔN {filter_pdf_c}")
-        col_pdf6.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_c, f"WANCHI_VatTu_{filter_pdf_c}.pdf", "application/pdf")
+            title_c = f"BÁO CÁO VẬT TƯ\nMÃ KHUÔN: {filter_pdf_c}" if filter_pdf_c != "Tất cả" else "BÁO CÁO VẬT TƯ TỔNG HỢP"
+            pdf_c = export_pdf(df_export_c, title_c)
+            st.session_state['img_c'] = convert_pdf_to_png(pdf_c)
+            
+    if st.session_state.get('img_c'):
+        col_pdf6.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_c'], f"WANCHI_VatTu_{filter_pdf_c}.png", "image/png", type="primary")
 
 
 # ------------------------------------------
@@ -549,15 +623,19 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
         st.rerun()
         
     st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo PDF")
+    st.subheader("📥 Xuất Báo Cáo ẢNH NÉT CAO")
     col_pdf1_d, col_pdf2_d = st.columns([1, 2])
-    filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất PDF:", ["Tất cả"] + list_molds_master, key="pdf_d")
+    filter_pdf_d = col_pdf1_d.selectbox("Chọn Mã khuôn để xuất Ảnh:", ["Tất cả"] + list_molds_master, key="pdf_d")
     
-    if st.button("Tạo file PDF (Module D)"):
-        with st.spinner("Đang trích xuất file PDF..."):
+    if st.button("Tạo file ẢNH (Module D)"):
+        with st.spinner("Đang trích xuất file ẢNH..."):
             df_export_d = edited_D if filter_pdf_d == "Tất cả" else edited_D[edited_D["Mã khuôn"] == filter_pdf_d]
-            pdf_d = export_pdf(df_export_d, f"BẢNG TỔNG HỢP CHI PHÍ KHUÔN {filter_pdf_d}")
-        col_pdf2_d.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_d, f"WANCHI_TongHop_{filter_pdf_d}.pdf", "application/pdf")
+            title_d = f"BẢNG TỔNG HỢP CHI PHÍ\nMÃ KHUÔN: {filter_pdf_d}" if filter_pdf_d != "Tất cả" else "BẢNG TỔNG HỢP CHI PHÍ TẤT CẢ KHUÔN"
+            pdf_d = export_pdf(df_export_d, title_d)
+            st.session_state['img_d'] = convert_pdf_to_png(pdf_d)
+            
+    if st.session_state.get('img_d'):
+        col_pdf2_d.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_d'], f"WANCHI_TongHop_{filter_pdf_d}.png", "image/png", type="primary")
 
 
 # ------------------------------------------
@@ -621,11 +699,14 @@ elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
         )
         
         st.markdown("---")
-        st.subheader("📥 Xuất Báo Cáo PDF Danh Sách Khuôn")
-        if st.button("Tạo file PDF (Module E)"):
-            with st.spinner("Đang trích xuất file PDF..."):
+        st.subheader("📥 Xuất Báo Cáo ẢNH Danh Sách Khuôn")
+        if st.button("Tạo file ẢNH (Module E)"):
+            with st.spinner("Đang trích xuất file ẢNH..."):
                 pdf_e = export_pdf(df_E, "DANH SÁCH TỔNG HỢP CÁC KHUÔN ĐÃ LÀM")
-            st.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_e, "WANCHI_DanhSachKhuon.pdf", "application/pdf")
+                st.session_state['img_e'] = convert_pdf_to_png(pdf_e)
+                
+        if st.session_state.get('img_e'):
+            st.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_e'], "WANCHI_DanhSachKhuon.png", "image/png", type="primary")
             
         st.markdown("---")
         st.subheader("🗑️ Khu Vực Quản Trị: Xóa Khuôn")
@@ -695,7 +776,7 @@ elif st.session_state.current_tab == "F. Tạo Đơn Hàng Gia Công":
         c5, c6, c7 = st.columns(3)
         tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
         coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
-        ghi_chu_f = c7.text_input("Ghi chú")
+        ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
         
         if st.form_submit_button("Lưu Đơn Hàng Mới"):
             final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
@@ -737,7 +818,7 @@ elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
         st.rerun()
         
     st.markdown("---")
-    st.subheader("📥 Xuất Báo Cáo Đơn Hàng")
+    st.subheader("📥 Xuất Báo Cáo ẢNH Đơn Hàng")
     
     col_pdf1_f, col_pdf2_f, col_pdf3_f = st.columns([1, 1, 2])
     
@@ -750,26 +831,42 @@ elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
         
     filter_pdf_vendor_f = col_pdf2_f.selectbox("2. Chọn Đơn vị gia công:", ["Tất cả"] + list_vendors_for_mold, key="pdf_vendor_f")
     
-    if st.button("Tạo file PDF (Module Theo Dõi Đơn Hàng)"):
-        with st.spinner("Đang trích xuất file PDF..."):
+    if st.button("Tạo file ẢNH (Module Theo Dõi Đơn Hàng)"):
+        with st.spinner("Đang trích xuất file ẢNH..."):
             df_export_f = edited_F.copy()
             title_pdf = "ĐƠN HÀNG GIA CÔNG"
             
             if filter_pdf_mold_f != "Tất cả":
                 df_export_f = df_export_f[df_export_f["Mã khuôn"] == filter_pdf_mold_f]
-                title_pdf += f" {filter_pdf_mold_f}"
+                title_pdf += f" - MÃ KHUÔN: {filter_pdf_mold_f}"
                 
+                # Quét Tên Khách hàng từ Module A
+                kh_str = ""
+                try:
+                    row_kh = df_A[(df_A["Mã khuôn"] == filter_pdf_mold_f) & (df_A["Tên NVL"] == "Khởi tạo khuôn")]
+                    if not row_kh.empty:
+                        kh_raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
+                        if kh_raw.startswith("KH: "):
+                            kh_str = kh_raw[4:]
+                        elif kh_raw and kh_raw.strip():
+                            kh_str = kh_raw
+                except: pass
+                
+                if kh_str:
+                    title_pdf += f"\nTÊN KHÁCH HÀNG: {kh_str}"
+                    
             if filter_pdf_vendor_f != "Tất cả":
                 df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
-                if filter_pdf_mold_f == "Tất cả":
-                    title_pdf += f" - {filter_pdf_vendor_f}"
-                    
+                title_pdf += f"\nĐƠN VỊ GIA CÔNG: {filter_pdf_vendor_f}"
+                
             pdf_f = export_pdf(df_export_f, title_pdf)
-        
-        file_name_pdf = f"WANCHI_DonHang_{filter_pdf_mold_f}"
+            st.session_state['img_f'] = convert_pdf_to_png(pdf_f)
+    
+    if st.session_state.get('img_f'):
+        file_name_img = f"WANCHI_DonHang_{filter_pdf_mold_f}"
         if filter_pdf_vendor_f != "Tất cả":
-            file_name_pdf += f"_{filter_pdf_vendor_f}"
-        file_name_pdf += ".pdf"
+            file_name_img += f"_{filter_pdf_vendor_f}"
+        file_name_img += ".png"
         
         col_pdf3_f.markdown("<br>", unsafe_allow_html=True)
-        col_pdf3_f.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_f, file_name_pdf, "application/pdf")
+        col_pdf3_f.download_button("⬇️ Nhấn để Tải ẢNH Xuống", st.session_state['img_f'], file_name_img, "image/png", type="primary")
