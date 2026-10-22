@@ -66,6 +66,12 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
         if unique_dv:
             dvgc_text = "Đơn vị gia công: " + ", ".join(unique_dv)
         df_export = df_export.drop(columns=["Đơn vị gia công"])
+
+    # Tách Ghi chú ra khỏi bảng để lập bảng riêng bên dưới
+    ghi_chu_data = []
+    if "Ghi chú" in df_export.columns:
+        ghi_chu_data = df_export["Ghi chú"].tolist()
+        df_export = df_export.drop(columns=["Ghi chú"])
     
     # Định dạng khổ A4 Dọc (Portrait)
     pdf = FPDF(orientation='P', unit='mm', format='A4')
@@ -154,7 +160,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                         max_w = item_w
             
             # Cấp diện tích tối đa cho các cột chứa text để ép xuống dòng
-            if col in ["Ghi chú", "Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
+            if col in ["Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
                 if max_w > 45: max_w = 45
             elif max_w > 50: max_w = 50
                 
@@ -242,6 +248,26 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                 else:
                     footer_data.append("")
             draw_row(footer_data, is_footer=True)
+            
+        # --- VẼ BẢNG GHI CHÚ RIÊNG ---
+        if ghi_chu_data:
+            valid_gc = [str(g).strip() for g in ghi_chu_data if pd.notnull(g) and str(g).strip() != "" and str(g).strip() != "None"]
+            if valid_gc:
+                pdf.ln(5)
+                pdf.set_x(10)
+                pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
+                pdf.set_fill_color(220, 220, 220)
+                pdf.cell(190, 8, txt=txt("GHI CHÚ"), border=1, ln=True, align='C', fill=True)
+                
+                pdf.set_x(10)
+                pdf.set_font(font_name, '', 9)
+                
+                if len(valid_gc) > 1:
+                    combined_gc = "\n".join([f"- {g}" for g in valid_gc])
+                else:
+                    combined_gc = valid_gc[0]
+                    
+                pdf.multi_cell(190, 6, txt=txt(combined_gc), border=1, align='L')
             
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
