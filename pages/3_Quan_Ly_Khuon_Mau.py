@@ -101,7 +101,8 @@ def export_pdf(df, title):
     pdf.cell(0, 5, txt=txt("SĐT: 0937.572.577"), ln=True, align='L')
     pdf.ln(12)
 
-    # --- IN TIÊU ĐỀ (HỖ TRỢ XUỐNG DÒNG) ---
+    # --- IN TIÊU ĐỀ CÂN GIỮA ---
+    pdf.set_x(10) # Reset lề trái về 10 để cân giữa toàn trang
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     
     # Lọc bỏ dòng "ĐƠN VỊ GIA CÔNG" nếu vô tình được truyền vào từ title để tránh in trùng lặp
@@ -111,14 +112,16 @@ def export_pdf(df, title):
     pdf.multi_cell(0, 8, txt=txt(clean_title.upper()), align='C')
     
     if dvgc_text:
+        pdf.set_x(10)
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
         pdf.multi_cell(0, 6, txt=txt(dvgc_text.upper()), align='C')
         
+    pdf.set_x(10)
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=txt(f"Ngày lập: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
     pdf.ln(5)
 
-    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN (CHO KHỔ DỌC) ---
+    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN (LUÔN ÉP FULL 190MM) ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
@@ -137,16 +140,16 @@ def export_pdf(df, title):
                     if item_w > max_w:
                         max_w = item_w
             
-            # Cấp diện tích tối đa cho các cột chứa text để ép xuống dòng (phù hợp khổ A4 dọc - chiều rộng ~190mm)
+            # Cấp diện tích tối đa cho các cột chứa text để ép xuống dòng
             if col in ["Ghi chú", "Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
                 if max_w > 45: max_w = 45
             elif max_w > 50: max_w = 50
                 
             col_widths.append(max_w)
         
-        # Bóp tỷ lệ cột nếu vượt quá chiều ngang A4 dọc (190mm)
+        # Bắt buộc kéo giãn bảng lấp đầy khổ A4 dọc (190mm)
         total_w = sum(col_widths)
-        if total_w > 190:
+        if total_w > 0:
             scale = 190 / total_w
             col_widths = [w * scale for w in col_widths]
 
@@ -175,6 +178,8 @@ def export_pdf(df, title):
                 pdf.add_page()
                 
             start_y = pdf.get_y()
+            pdf.set_x(10) # Reset X về 10 để đảm bảo mỗi dòng bảng đều bám sát lề trái
+            
             for i, val in enumerate(row_data):
                 start_x = pdf.get_x()
                 align_col = 'C' if is_header else ('R' if df_export.columns[i] in num_cols else 'L')
