@@ -54,8 +54,21 @@ def export_pdf(df, title):
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
         df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
+        
+    # Xóa cột Mã khuôn
+    if "Mã khuôn" in df_export.columns:
+        df_export = df_export.drop(columns=["Mã khuôn"])
+        
+    # Tách Đơn vị gia công ra khỏi bảng
+    dvgc_text = ""
+    if "Đơn vị gia công" in df_export.columns:
+        unique_dv = [str(x) for x in df_export["Đơn vị gia công"].dropna().unique() if str(x).strip()]
+        if unique_dv:
+            dvgc_text = "ĐƠN VỊ GIA CÔNG: " + ", ".join(unique_dv)
+        df_export = df_export.drop(columns=["Đơn vị gia công"])
     
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    # Định dạng khổ A4 Dọc (Portrait)
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     
     try:
@@ -90,13 +103,22 @@ def export_pdf(df, title):
 
     # --- IN TIÊU ĐỀ (HỖ TRỢ XUỐNG DÒNG) ---
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
-    pdf.multi_cell(0, 8, txt=txt(title.upper()), align='C')
     
+    # Lọc bỏ dòng "ĐƠN VỊ GIA CÔNG" nếu vô tình được truyền vào từ title để tránh in trùng lặp
+    clean_title_lines = [line for line in title.split('\n') if not line.startswith("ĐƠN VỊ GIA CÔNG")]
+    clean_title = "\n".join(clean_title_lines)
+    
+    pdf.multi_cell(0, 8, txt=txt(clean_title.upper()), align='C')
+    
+    if dvgc_text:
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
+        pdf.multi_cell(0, 6, txt=txt(dvgc_text.upper()), align='C')
+        
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=txt(f"Ngày lập: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
     pdf.ln(5)
 
-    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN ---
+    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN (CHO KHỔ DỌC) ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
@@ -110,32 +132,29 @@ def export_pdf(df, title):
                     try: val_str = f"{float(item):,.0f}".replace(",", ".")
                     except: pass
                 
-                # Quét theo từng dòng văn bản
                 for para in val_str.split('\n'):
                     item_w = pdf.get_string_width(txt(para)) + 4
                     if item_w > max_w:
                         max_w = item_w
             
-            # Cấp diện tích tối đa cho các cột chứa text dài để nó tự động xuống dòng
-            if col in ["Ghi chú", "Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Đơn vị gia công"]:
-                if max_w > 65: max_w = 65
-            elif max_w > 75: max_w = 75
+            # Cấp diện tích tối đa cho các cột chứa text để ép xuống dòng (phù hợp khổ A4 dọc - chiều rộng ~190mm)
+            if col in ["Ghi chú", "Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
+                if max_w > 45: max_w = 45
+            elif max_w > 50: max_w = 50
                 
             col_widths.append(max_w)
         
-        # Bóp lề nếu tràn trang A4 (277mm Landscape)
+        # Bóp tỷ lệ cột nếu vượt quá chiều ngang A4 dọc (190mm)
         total_w = sum(col_widths)
-        if total_w > 277:
-            scale = 277 / total_w
+        if total_w > 190:
+            scale = 190 / total_w
             col_widths = [w * scale for w in col_widths]
 
         sum_tong_tien = 0 
         
-        # Hàm vẽ 1 hàng (hỗ trợ kéo giãn chiều cao và xuống dòng)
         def draw_row(row_data, is_header=False, is_footer=False):
             line_h = 6 if is_header or is_footer else 5
             max_lines = 1
-            # 1. Tính toán chiều cao cần thiết cho dòng này
             for i, val in enumerate(row_data):
                 cw = col_widths[i]
                 lines = 1
@@ -152,11 +171,10 @@ def export_pdf(df, title):
                 if lines > max_lines: max_lines = lines
                 
             row_height = max_lines * line_h
-            if pdf.get_y() + row_height > 190:
+            if pdf.get_y() + row_height > 270: # Vượt biên dưới của A4 Dọc
                 pdf.add_page()
                 
             start_y = pdf.get_y()
-            # 2. Bắt đầu vẽ nội dung từng ô
             for i, val in enumerate(row_data):
                 start_x = pdf.get_x()
                 align_col = 'C' if is_header else ('R' if df_export.columns[i] in num_cols else 'L')
@@ -176,12 +194,10 @@ def export_pdf(df, title):
                 
             pdf.set_y(start_y + row_height)
 
-        # Vẽ Dòng Header
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
         headers = [txt(col) for col in df_export.columns]
         draw_row(headers, is_header=True)
         
-        # Vẽ Các Dòng Dữ Liệu
         pdf.set_font(font_name, '', 8)
         for _, row in df_export.iterrows():
             row_data = []
@@ -197,7 +213,6 @@ def export_pdf(df, title):
                 row_data.append(txt(val_str))
             draw_row(row_data)
             
-        # Vẽ Dòng Tổng Kết Cuối
         if any(c in df_export.columns for c in ["Tổng tiền", "TỔNG CỘNG", "Tổng giá trị khuôn"]):
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             footer_data = []
@@ -838,7 +853,7 @@ elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
             
             if filter_pdf_mold_f != "Tất cả":
                 df_export_f = df_export_f[df_export_f["Mã khuôn"] == filter_pdf_mold_f]
-                title_pdf += f" - MÃ KHUÔN: {filter_pdf_mold_f}"
+                title_pdf += f"\nMÃ KHUÔN: {filter_pdf_mold_f}"
                 
                 # Quét Tên Khách hàng từ Module A
                 kh_str = ""
@@ -857,7 +872,7 @@ elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
                     
             if filter_pdf_vendor_f != "Tất cả":
                 df_export_f = df_export_f[df_export_f["Đơn vị gia công"] == filter_pdf_vendor_f]
-                title_pdf += f"\nĐƠN VỊ GIA CÔNG: {filter_pdf_vendor_f}"
+                # Bỏ thêm title_pdf ở đây vì hàm export_pdf sẽ tự trích "Đơn vị gia công" từ df ra
                 
             pdf_f = export_pdf(df_export_f, title_pdf)
             st.session_state['img_f'] = convert_pdf_to_png(pdf_f)
