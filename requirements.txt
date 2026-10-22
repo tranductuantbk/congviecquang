@@ -4,3 +4,4 @@ psycopg[binary]
 SQLAlchemy
 fpdf2
 docxtpl
+PyMuPDF
