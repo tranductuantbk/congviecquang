@@ -268,15 +268,16 @@ list_molds_master = sorted(list(all_molds_set))
 
 
 # ==========================================
-# GIAO DIỆN CHÍNH & LƯỚI ĐIỀU HƯỚNG 3 CỘT
+# GIAO DIỆN CHÍNH & LƯỚI ĐIỀU HƯỚNG
 # ==========================================
 st.title("🏭 Công Cụ Quản Lý Khuôn Mẫu WANCHI")
 st.markdown("---")
 
 if "current_tab" not in st.session_state:
-    st.session_state.current_tab = "A. Nguyên Vật Liệu"
+    st.session_state.current_tab = "➕ Tạo Khuôn Mới"
 
 menu_items = [
+    "➕ Tạo Khuôn Mới",
     "A. Nguyên Vật Liệu", 
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
@@ -286,8 +287,8 @@ menu_items = [
     "G. Theo Dõi Đơn Hàng"
 ]
 
-for i in range(0, len(menu_items), 3):
-    cols = st.columns(3)
+for i in range(0, len(menu_items), 4):
+    cols = st.columns(4)
     for j, col in enumerate(cols):
         if i + j < len(menu_items):
             item = menu_items[i + j]
@@ -299,16 +300,63 @@ for i in range(0, len(menu_items), 3):
 st.markdown("---")
 
 # ------------------------------------------
+# MODULE 0: TẠO KHUÔN MỚI
+# ------------------------------------------
+if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
+    st.header("➕ Khởi Tạo Dự Án Khuôn Mới")
+    st.info("Khi tạo khuôn mới tại đây, mã khuôn sẽ tự động xuất hiện ở tất cả các tab khác để anh/chị tiện chọn.")
+    
+    with st.form("form_tao_khuon_moi", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        ngay_tao = c1.date_input("Ngày Khởi Tạo", datetime.today())
+        khach_hang = c2.text_input("Tên Khách Hàng (Tùy chọn)")
+        ma_khuon_moi = c3.text_input("Nhập Mã Khuôn Mới (*)", help="Bắt buộc nhập. VD: KHUON_ABC")
+        
+        st.write("")
+        btn_tao_khuon = st.form_submit_button("🚀 XÁC NHẬN TẠO KHUÔN MỚI", type="primary", use_container_width=True)
+        
+        if btn_tao_khuon:
+            ma_khuon_moi = ma_khuon_moi.strip().upper()
+            if not ma_khuon_moi:
+                st.error("⚠️ Vui lòng nhập Mã Khuôn!")
+            elif ma_khuon_moi in list_molds_master:
+                st.error(f"⚠️ Mã khuôn **{ma_khuon_moi}** đã tồn tại trong hệ thống. Vui lòng nhập mã khác!")
+            else:
+                with st.spinner("⏳ Đang khởi tạo kết nối toàn hệ thống..."):
+                    ngay_str = ngay_tao.strftime('%d/%m/%Y')
+                    ghi_chu_kh = f"KH: {khach_hang}" if khach_hang else ""
+                    
+                    row_a = {"Ngày": ngay_str, "Nhà cung cấp NVL": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tên NVL": "Khởi tạo khuôn", "Tổng tiền": 0}
+                    append_data(row_a, "wanchi_a", df_A)
+                    
+                    row_b = {"Ngày": ngay_str, "Đơn vị gia công": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tổng tiền": 0}
+                    append_data(row_b, "wanchi_b", df_B)
+                    
+                    row_c = {"Ngày": ngay_str, "Nhà cung cấp vật tư": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tên linh kiện": "Khởi tạo", "Tổng tiền": 0}
+                    append_data(row_c, "wanchi_c", df_C)
+                    
+                    row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Gia Công (B)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
+                    append_data(row_d, "wanchi_d", df_D)
+                    
+                    row_f = {"Mã khuôn": ma_khuon_moi, "Đơn vị gia công": "Chưa có", "Các mục gia công": "Khởi tạo", "Thời gian nhận": ngay_str, "Thời gian bàn giao": ngay_str, "Tổng giá gia công": 0, "Cọc đợt 1": 0, "Còn nợ": 0, "Ghi chú": ghi_chu_kh}
+                    append_data(row_f, "wanchi_f", df_F)
+                    
+                st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Bây giờ anh/chị có thể sang các Tab A, B, C để nhập chi tiết.")
+                time.sleep(2)
+                st.rerun()
+
+
+# ------------------------------------------
 # MODULE A: NGUYÊN VẬT LIỆU
 # ------------------------------------------
-if st.session_state.current_tab == "A. Nguyên Vật Liệu":
+elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
     st.header("A. Nguyên Vật Liệu")
     with st.expander("➕ Nhập Nguyên Vật Liệu Mới"):
         with st.form("form_A"):
             c1, c2, c3, c4 = st.columns(4)
             ngay_a = c1.date_input("Ngày", datetime.today())
             ncc_a = c2.text_input("Nhà cung cấp NVL")
-            ma_khuon_a = c3.text_input("Mã khuôn (Nhập mã mới tại đây)")
+            ma_khuon_a = c3.selectbox("Chọn mã khuôn:", list_molds_master) if list_molds_master else c3.text_input("Mã khuôn")
             ten_nvl = c4.text_input("Tên NVL")
             
             c5, c6, c7 = st.columns(3)
