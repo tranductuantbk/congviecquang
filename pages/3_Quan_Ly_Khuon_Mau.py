@@ -140,7 +140,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     # --- THUẬT TOÁN CO GIÃN CỘT ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
-        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
+        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
         
         col_widths = []
         for col in df_export.columns:
@@ -324,6 +324,19 @@ def save_data(df, table_name):
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
+def delete_mold_from_db(mold_code):
+    try:
+        with conn.session as session:
+            session.execute(text('DELETE FROM wanchi_a WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code})
+            session.commit()
+        force_reload_cache()
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi xóa khuôn trên database: {str(e)}")
+
 
 # ==========================================
 # KHỞI TẠO DỮ LIỆU TỪ DB
@@ -332,19 +345,11 @@ cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách",
 df_A = load_data("wanchi_a", cols_A)
 df_A = df_A.loc[:, ~df_A.columns.duplicated()]
 
-cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
-df_B = load_data("wanchi_b", cols_B)
-if "Đơn giá" in df_B.columns: df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
-if "Ráp khuôn hoàn thiện" in df_B.columns: df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
-df_B = df_B.loc[:, ~df_B.columns.duplicated()]
-if "Dọn phôi" not in df_B.columns: df_B["Dọn phôi"] = 0
-df_B = df_B[[c for c in cols_B if c in df_B.columns]]
-
 cols_C = ["Ngày", "Nhà cung cấp vật tư", "Mã khuôn", "Tên linh kiện", "Đơn giá", "Tổng tiền"]
 df_C = load_data("wanchi_c", cols_C)
 df_C = df_C.loc[:, ~df_C.columns.duplicated()]
 
-cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
+cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
 df_D = load_data("wanchi_d", cols_D)
 df_D = df_D.loc[:, ~df_D.columns.duplicated()]
 
@@ -359,7 +364,6 @@ df_Doitac = df_Doitac.loc[:, ~df_Doitac.columns.duplicated()]
 
 all_molds_set = set()
 if not df_A.empty: all_molds_set.update(df_A["Mã khuôn"].dropna().unique())
-if not df_B.empty: all_molds_set.update(df_B["Mã khuôn"].dropna().unique())
 if not df_C.empty: all_molds_set.update(df_C["Mã khuôn"].dropna().unique())
 if not df_D.empty: all_molds_set.update(df_D["Mã khuôn"].dropna().unique())
 if not df_F.empty: all_molds_set.update(df_F["Mã khuôn"].dropna().unique())
@@ -378,11 +382,10 @@ if "current_tab" not in st.session_state:
 menu_items = [
     "➕ Tạo Khuôn Mới",
     "A. Nguyên Vật Liệu", 
-    "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
     "E. Danh Mục",
-    "F. Tạo Đơn Hàng",
+    "F. Tạo đơn Gia công",
     "G. Theo Dõi Đơn Hàng"
 ]
 
@@ -423,7 +426,7 @@ if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
             else:
                 with st.spinner("⏳ Đang khởi tạo kết nối toàn hệ thống..."):
                     ngay_str = ngay_tao.strftime('%d/%m/%Y')
-                    row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Gia Công (B)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
+                    row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
                     append_data(row_d, "wanchi_d", df_D)
                     
                 st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Mã khuôn này hiện đã có mặt trong Danh Mục để bạn chọn.")
@@ -506,91 +509,6 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_a'], st.session_state.get('file_name_a', "WANCHI_NVL.png"), "image/png", type="primary", use_container_width=True)
 
 # ------------------------------------------
-# MODULE B: GIA CÔNG
-# ------------------------------------------
-elif st.session_state.current_tab == "B. Gia Công":
-    st.header("B. Gia Công")
-    with st.expander("➕ Nhập Chi Phí Gia Công Mới"):
-        with st.form("form_B"):
-            c1, c2, c3 = st.columns(3)
-            ngay_b = c1.date_input("Ngày", datetime.today(), key="ngay_b")
-            ncc_b = c2.text_input("Đơn vị gia công")
-            ma_khuon_b = c3.selectbox("Chọn mã khuôn:", list_molds_master) if list_molds_master else c3.text_input("Mã khuôn")
-            
-            c4, c5, c6 = st.columns(3)
-            cat_day = c4.number_input("Cắt dây", min_value=0, step=1)
-            xung_dien = c5.number_input("Xung điện (EDM)", min_value=0, step=1)
-            phay_cnc = c6.number_input("Phay CNC", min_value=0, step=1)
-            
-            c7, c8, c9 = st.columns(3)
-            nhiet_luyen = c7.number_input("Nhiệt Luyện", min_value=0, step=1)
-            danh_bong = c8.number_input("Đánh bóng", min_value=0, step=1)
-            nham = c9.number_input("Tạo Nhám hoa văn", min_value=0, step=1)
-            
-            c10, c11, _ = st.columns(3)
-            don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
-            rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1)
-            
-            st.markdown("---")
-            _, c12 = st.columns([3, 1])
-            tong_tien_b = c12.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1, key="tong_tien_b")
-            
-            if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
-                with st.spinner("⏳ Đang lưu dữ liệu..."):
-                    new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
-                                 "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
-                                 "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
-                                 "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
-                    append_data(new_row_b, "wanchi_b", df_B)
-                st.rerun()
-
-    st.subheader("Bảng Dữ Liệu Gia Công")
-    df_B_disp = df_B.copy()
-    df_B_disp.insert(0, "Chọn", False)
-    
-    edited_B = st.data_editor(df_B_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_B")
-    edited_B["Chọn"] = edited_B["Chọn"].fillna(False).astype(bool)
-    
-    if st.button("💾 CẬP NHẬT DỮ LIỆU GIA CÔNG", type="primary", use_container_width=True):
-        with st.spinner("⏳ Đang cập nhật dữ liệu..."):
-            save_data(edited_B.drop(columns=["Chọn"]), "wanchi_b")
-        st.success("✅ Đã cập nhật thành công!")
-        time.sleep(1)
-        st.rerun()
-            
-    st.markdown("---")
-    col_b2, col_b3 = st.columns(2)
-    with col_b2:
-        if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_b"):
-            selected_B = edited_B[edited_B["Chọn"] == True]
-            if selected_B.empty:
-                st.warning("⚠️ Vui lòng tick chọn ít nhất 1 dòng để xuất ảnh!")
-            else:
-                with st.spinner("Đang trích xuất file ẢNH..."):
-                    unique_molds = selected_B["Mã khuôn"].dropna().unique().tolist()
-                    filter_pdf_b = unique_molds[0] if len(unique_molds) == 1 else "NHIỀU MÃ KHUÔN"
-                    
-                    kh_str = None
-                    if filter_pdf_b != "NHIỀU MÃ KHUÔN":
-                        try:
-                            row_kh = df_A[(df_A["Mã khuôn"] == filter_pdf_b) & (df_A["Tên NVL"] == "Khởi tạo khuôn")]
-                            if not row_kh.empty:
-                                kh_raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
-                                if kh_raw.startswith("KH: "):
-                                    kh_str = kh_raw[4:]
-                                elif kh_raw and kh_raw.strip():
-                                    kh_str = kh_raw
-                        except: pass
-                    
-                    pdf_b = export_pdf(selected_B.drop(columns=["Chọn"]), title="BÁO CÁO CHI PHÍ GIA CÔNG", ma_khuon_str=filter_pdf_b if filter_pdf_b != "NHIỀU MÃ KHUÔN" else None, khach_hang_str=kh_str)
-                    st.session_state['img_b'] = convert_pdf_to_png(pdf_b)
-                    st.session_state['file_name_b'] = f"WANCHI_GiaCong_{filter_pdf_b}.png"
-                    
-    with col_b3:
-        if st.session_state.get('img_b'):
-            st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_b'], st.session_state.get('file_name_b', "WANCHI_GiaCong.png"), "image/png", type="primary", use_container_width=True)
-
-# ------------------------------------------
 # MODULE C: VẬT TƯ
 # ------------------------------------------
 elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
@@ -670,23 +588,21 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
     st.header("D. Tổng Hợp Giá Trị Khuôn")
     
     with st.expander("🔄 Cập Nhật Tổng Giá Tự Động"):
-        st.write("Chọn mã khuôn để tự động quét toàn bộ chi phí từ 3 Module trên:")
+        st.write("Chọn mã khuôn để tự động quét toàn bộ chi phí từ 2 Module trên (A, C):")
         selected_mold = st.selectbox("Mã Khuôn Cần Tổng Kết:", list_molds_master, key="mold_total")
         
         if st.button("🧮 Tính Toán Bảng Tổng"):
             with st.spinner("⏳ Đang xử lý tính toán..."):
                 if selected_mold:
                     sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
-                    sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
                     sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
                     
-                    total = sum_A + sum_B + sum_C
+                    total = sum_A + sum_C
                     
                     new_row_D = {
                         "Ngày": datetime.today().strftime('%d/%m/%Y'),
                         "Mã khuôn": selected_mold,
                         "Tổng Nguyên Vật Liệu (A)": sum_A,
-                        "Tổng Gia Công (B)": sum_B,
                         "Tổng Vật Tư (C)": sum_C,
                         "TỔNG CỘNG": total
                     }
@@ -765,7 +681,7 @@ elif st.session_state.current_tab == "E. Danh Mục":
         danh_sach_khuon_data = []
         for mk in list_molds_master:
             dates = []
-            for df_temp in [df_A, df_B, df_C]:
+            for df_temp in [df_A, df_C]:
                 if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
                     mold_dates = df_temp[df_temp['Mã khuôn'] == mk]['Ngày'].dropna().tolist()
                     dates.extend(mold_dates)
@@ -789,9 +705,8 @@ elif st.session_state.current_tab == "E. Danh Mục":
             
             if tong_gia == 0:
                 sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
-                sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
                 sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
-                tong_gia = sum_A + sum_B + sum_C
+                tong_gia = sum_A + sum_C
                 
             danh_sach_khuon_data.append({
                 "Ngày bắt đầu": ngay_lam,
@@ -835,8 +750,8 @@ elif st.session_state.current_tab == "E. Danh Mục":
 # ------------------------------------------
 # MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
 # ------------------------------------------
-elif st.session_state.current_tab == "F. Tạo Đơn Hàng":
-    st.header("F. Tạo Đơn Hàng Gia Công")
+elif st.session_state.current_tab == "F. Tạo đơn Gia công":
+    st.header("F. Tạo đơn Gia công")
     st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
     with st.form("form_f"):
