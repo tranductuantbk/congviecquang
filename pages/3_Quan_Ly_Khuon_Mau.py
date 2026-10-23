@@ -758,9 +758,19 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
         c1, c2 = st.columns(2)
         ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
         
-        list_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
-        dv_options = ["(Nhập mới)"] + list_vendors
-        dv_select = c2.selectbox("Đơn vị gia công (Chọn đối tác cũ hoặc nhập mới bên dưới)", dv_options)
+        # --- CẬP NHẬT: LẤY DANH SÁCH TỪ DANH MỤC NHÀ GIA CÔNG ---
+        list_ngc = []
+        if not df_Doitac.empty:
+            list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].dropna().unique().tolist()
+            
+        # Kéo thêm các nhà gia công cũ từ đơn hàng chưa được tạo trong Danh Mục (để không mất dữ liệu cũ)
+        old_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
+        for v in old_vendors:
+            if v not in list_ngc:
+                list_ngc.append(v)
+                
+        dv_options = ["(Nhập mới)"] + list_ngc
+        dv_select = c2.selectbox("Đơn vị gia công (Chọn từ Danh Mục hoặc nhập mới bên dưới)", dv_options)
         dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
         
         st.markdown("---")
@@ -785,6 +795,11 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
                 st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
             else:
                 with st.spinner("⏳ Đang lưu đơn hàng..."):
+                    # Tự động đẩy Nhà gia công mới tạo vào hệ thống Danh mục nếu chưa tồn tại
+                    if final_dv not in list_ngc and final_dv != "":
+                        new_row_dt = {"Phân loại": "Nhà gia công (NGC)", "Tên đối tác": final_dv}
+                        append_data(new_row_dt, "wanchi_doitac", df_Doitac)
+
                     con_no = tong_gia_f - coc_f
                     new_row_f = {
                         "Mã khuôn": ma_khuon_f.strip().upper(),
