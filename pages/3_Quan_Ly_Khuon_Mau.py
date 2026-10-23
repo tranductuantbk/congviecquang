@@ -324,19 +324,6 @@ def save_data(df, table_name):
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
-def delete_mold_from_db(mold_code):
-    try:
-        with conn.session as session:
-            session.execute(text('DELETE FROM wanchi_a WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.commit()
-        force_reload_cache()
-    except Exception as e:
-        st.error(f"⚠️ Lỗi khi xóa khuôn trên database: {str(e)}")
-
 
 # ==========================================
 # KHỞI TẠO DỮ LIỆU TỪ DB
@@ -365,6 +352,11 @@ cols_F = ["Mã khuôn", "Đơn vị gia công", "Các mục gia công", "Thời 
 df_F = load_data("wanchi_f", cols_F)
 df_F = df_F.loc[:, ~df_F.columns.duplicated()]
 
+# Dữ liệu Bảng Đối tác mới (NCC, NGC)
+cols_Doitac = ["Phân loại", "Tên đối tác"]
+df_Doitac = load_data("wanchi_doitac", cols_Doitac)
+df_Doitac = df_Doitac.loc[:, ~df_Doitac.columns.duplicated()]
+
 all_molds_set = set()
 if not df_A.empty: all_molds_set.update(df_A["Mã khuôn"].dropna().unique())
 if not df_B.empty: all_molds_set.update(df_B["Mã khuôn"].dropna().unique())
@@ -389,7 +381,7 @@ menu_items = [
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
-    "E. Danh Sách",
+    "E. Danh Mục",
     "F. Tạo Đơn Hàng",
     "G. Theo Dõi Đơn Hàng"
 ]
@@ -411,7 +403,7 @@ st.markdown("---")
 # ------------------------------------------
 if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
     st.header("➕ Khởi Tạo Dự Án Khuôn Mới")
-    st.info("Khuôn mới sẽ được ghi danh vào hệ thống (Danh Sách) để bạn có thể chọn khi nhập liệu, không làm rác các bảng chi tiết.")
+    st.info("Khuôn mới sẽ được ghi danh vào hệ thống (Danh Mục) để bạn có thể chọn khi nhập liệu, không làm rác các bảng chi tiết.")
     
     with st.form("form_tao_khuon_moi", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
@@ -431,11 +423,10 @@ if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
             else:
                 with st.spinner("⏳ Đang khởi tạo kết nối toàn hệ thống..."):
                     ngay_str = ngay_tao.strftime('%d/%m/%Y')
-                    # Chỉ chèn vào bảng D (Tổng kết) để định danh khuôn trong hệ thống (hiện lên Tab E), giữ sạch các bảng A, B, C, F
                     row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Gia Công (B)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
                     append_data(row_d, "wanchi_d", df_D)
                     
-                st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Mã khuôn này hiện đã có mặt trong Danh Sách để bạn chọn.")
+                st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Mã khuôn này hiện đã có mặt trong Danh Mục để bạn chọn.")
                 time.sleep(2)
                 st.rerun()
 
@@ -475,7 +466,6 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
     edited_A = st.data_editor(df_A_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_A")
     edited_A["Chọn"] = edited_A["Chọn"].fillna(False).astype(bool)
     
-    # Nút cập nhật full size ngay dưới bảng
     if st.button("💾 CẬP NHẬT DỮ LIỆU NGUYÊN VẬT LIỆU", type="primary", use_container_width=True):
         with st.spinner("⏳ Đang cập nhật dữ liệu, vui lòng đợi..."):
             save_data(edited_A.drop(columns=["Chọn"]), "wanchi_a")
@@ -760,126 +750,87 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_d'], st.session_state.get('file_name_d', "WANCHI_TongHop.png"), "image/png", type="primary", use_container_width=True)
 
 # ------------------------------------------
-# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP
+# MODULE E: DANH MỤC QUẢN LÝ (KHUÔN, NCC, NGC)
 # ------------------------------------------
-elif st.session_state.current_tab == "E. Danh Sách":
-    st.header("E. Danh Sách Các Khuôn Đã Làm")
+elif st.session_state.current_tab == "E. Danh Mục":
+    st.header("E. Danh Mục Hệ Thống")
+    st.markdown("Bảng điều khiển 2 cột: Quản lý danh sách Khuôn mẫu hiện hành và Hệ thống đối tác (Nhà cung cấp, Nhà gia công).")
     
-    danh_sach_khuon_data = []
-    for mk in list_molds_master:
-        dates = []
-        for df_temp in [df_A, df_B, df_C]:
-            if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
-                mold_dates = df_temp[df_temp['Mã khuôn'] == mk]['Ngày'].dropna().tolist()
-                dates.extend(mold_dates)
+    col_k, col_dt = st.columns(2)
+    
+    # ------------------ CỘT 1: DANH SÁCH KHUÔN ------------------
+    with col_k:
+        st.subheader("📋 Danh Sách Khuôn")
         
-        ngay_lam = ""
-        if dates:
-            parsed_dates = []
-            for d in dates:
-                try:
-                    parsed_dates.append(datetime.strptime(str(d), '%d/%m/%Y'))
-                except:
-                    pass
-            if parsed_dates:
-                ngay_lam = min(parsed_dates).strftime('%d/%m/%Y')
-        
-        tong_gia = 0
-        if not df_D.empty and 'Mã khuôn' in df_D.columns:
-            row_d = df_D[df_D['Mã khuôn'] == mk]
-            if not row_d.empty:
-                tong_gia = row_d['TỔNG CỘNG'].values[0]
-        
-        if tong_gia == 0:
-            sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
-            sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
-            sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
-            tong_gia = sum_A + sum_B + sum_C
+        danh_sach_khuon_data = []
+        for mk in list_molds_master:
+            dates = []
+            for df_temp in [df_A, df_B, df_C]:
+                if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
+                    mold_dates = df_temp[df_temp['Mã khuôn'] == mk]['Ngày'].dropna().tolist()
+                    dates.extend(mold_dates)
             
-        danh_sach_khuon_data.append({
-            "Ngày làm khuôn": ngay_lam,
-            "Mã khuôn": mk,
-            "Tổng giá trị khuôn": tong_gia
-        })
-        
-    df_E = pd.DataFrame(danh_sach_khuon_data)
-    
-    if not df_E.empty:
-        df_E_disp = df_E.copy()
-        df_E_disp.insert(0, "Chọn", False)
-        
-        st.markdown("Bảng tóm tắt tự động thu thập thông tin từ hệ thống.")
-        edited_E = st.data_editor(
-            df_E_disp,
-            column_config={
-                "Tổng giá trị khuôn": st.column_config.NumberColumn(
-                    "Tổng giá trị khuôn (VNĐ)",
-                    format="%d",
-                    help="Được tổng hợp tự động từ Tab D"
-                )
-            },
-            use_container_width=True,
-            hide_index=True,
-            key="edit_E"
-        )
-        edited_E["Chọn"] = edited_E["Chọn"].fillna(False).astype(bool)
-        
-        # Bảng E được tự động sinh ra nên không cần nút lưu Cập Nhật. Dành cho 2 nút xuất ảnh.
-        st.markdown("---")
-        col_e1, col_e2 = st.columns(2)
-        with col_e1:
-            if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_e"):
-                selected_E = edited_E[edited_E["Chọn"] == True]
-                if selected_E.empty:
-                    st.warning("⚠️ Vui lòng tick chọn ít nhất 1 dòng để xuất ảnh!")
-                else:
-                    with st.spinner("Đang trích xuất file ẢNH..."):
-                        pdf_e = export_pdf(selected_E.drop(columns=["Chọn"]), title="DANH SÁCH TỔNG HỢP CÁC KHUÔN ĐÃ LÀM")
-                        st.session_state['img_e'] = convert_pdf_to_png(pdf_e)
-                        
-        with col_e2:
-            if st.session_state.get('img_e'):
-                st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_e'], "WANCHI_DanhSachKhuon.png", "image/png", type="primary", use_container_width=True)
+            ngay_lam = ""
+            if dates:
+                parsed_dates = []
+                for d in dates:
+                    try:
+                        parsed_dates.append(datetime.strptime(str(d), '%d/%m/%Y'))
+                    except:
+                        pass
+                if parsed_dates:
+                    ngay_lam = min(parsed_dates).strftime('%d/%m/%Y')
+            
+            tong_gia = 0
+            if not df_D.empty and 'Mã khuôn' in df_D.columns:
+                row_d = df_D[df_D['Mã khuôn'] == mk]
+                if not row_d.empty:
+                    tong_gia = row_d['TỔNG CỘNG'].values[0]
+            
+            if tong_gia == 0:
+                sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
+                sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
+                sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
+                tong_gia = sum_A + sum_B + sum_C
                 
-        st.markdown("---")
-        st.subheader("🗑️ Khu Vực Quản Trị: Xóa Khuôn")
-        st.warning("⚠️ Công cụ này dùng để xóa toàn bộ dữ liệu của một dự án khuôn lỗi hoặc nhập sai. Thao tác này sẽ dọn sạch dữ liệu ở cả 5 bảng và không thể khôi phục.")
+            danh_sach_khuon_data.append({
+                "Ngày bắt đầu": ngay_lam,
+                "Mã khuôn": mk,
+                "Tổng giá trị (VNĐ)": f"{tong_gia:,.0f}" if tong_gia > 0 else "0"
+            })
+            
+        df_E = pd.DataFrame(danh_sach_khuon_data)
         
-        col_del1, col_del2 = st.columns([1, 1])
-        selected_mold_to_delete = col_del1.selectbox("Chọn mã khuôn cần xóa hoàn toàn:", list_molds_master, key="del_mold_select")
+        if not df_E.empty:
+            st.dataframe(df_E, use_container_width=True, hide_index=True)
+        else:
+            st.info("Chưa có khuôn nào trong hệ thống.")
+
+    # ------------------ CỘT 2: DANH SÁCH ĐỐI TÁC ------------------
+    with col_dt:
+        st.subheader("🤝 Danh Sách NCC, NGC")
         
-        if "confirm_delete" not in st.session_state:
-            st.session_state.confirm_delete = False
-            st.session_state.mold_to_delete = None
-
-        if col_del1.button("🗑️ Xóa khuôn này"):
-            if selected_mold_to_delete:
-                st.session_state.confirm_delete = True
-                st.session_state.mold_to_delete = selected_mold_to_delete
-                st.rerun()
-
-        if st.session_state.get("confirm_delete") and st.session_state.get("mold_to_delete"):
-            mold = st.session_state.mold_to_delete
-            with st.container(border=True):
-                st.error(f"🛑 BẠN ĐANG THAO TÁC XÓA KHUÔN: **{mold}**")
-                st.write(f"Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ lịch sử chi phí của **{mold}** không? Hãy xác nhận bên dưới.")
-                
-                c_yes, c_no = st.columns(2)
-                if c_yes.button("✅ Vâng, Xóa Toàn Bộ"):
-                    with st.spinner(f"Đang dọn dẹp dữ liệu của khuôn {mold}..."):
-                        delete_mold_from_db(mold)
-                        st.session_state.confirm_delete = False
-                        st.session_state.mold_to_delete = None
-                    st.success(f"🎉 Đã xóa thành công toàn bộ dữ liệu của khuôn {mold}!")
+        with st.form("form_them_doitac", clear_on_submit=True):
+            c_loai, c_ten = st.columns([1, 2])
+            loai_doitac = c_loai.selectbox("Phân loại", ["Nhà cung cấp (NCC)", "Nhà gia công (NGC)"])
+            ten_doitac = c_ten.text_input("Nhập tên Đối tác (NCC / NGC)")
+            
+            if st.form_submit_button("➕ Thêm Đối Tác Mới", type="primary", use_container_width=True):
+                if ten_doitac.strip():
+                    with st.spinner("Đang lưu đối tác..."):
+                        new_row_dt = {"Phân loại": loai_doitac, "Tên đối tác": ten_doitac.strip()}
+                        append_data(new_row_dt, "wanchi_doitac", df_Doitac)
+                    st.success("✅ Đã thêm vào danh sách đối tác!")
                     time.sleep(1)
                     st.rerun()
+                else:
+                    st.warning("⚠️ Vui lòng nhập tên Đối tác!")
                     
-                if c_no.button("❌ Hủy bỏ, Không xóa"):
-                    st.session_state.confirm_delete = False
-                    st.session_state.mold_to_delete = None
-                    st.rerun()
-    else:
-        st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
+        # Hiển thị bảng đối tác (chỉ đọc)
+        if not df_Doitac.empty:
+            st.dataframe(df_Doitac, use_container_width=True, hide_index=True)
+        else:
+            st.info("Danh sách đối tác đang trống.")
 
 # ------------------------------------------
 # MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
