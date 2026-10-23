@@ -754,68 +754,108 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
     st.header("F. Tạo đơn Gia công")
     st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
-    with st.form("form_f"):
-        c1, c2 = st.columns(2)
-        ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
+    c1, c2 = st.columns(2)
+    ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
+    
+    # LẤY DANH SÁCH TỪ DANH MỤC NHÀ GIA CÔNG
+    list_ngc = []
+    if not df_Doitac.empty:
+        list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].dropna().unique().tolist()
         
-        # --- CẬP NHẬT: LẤY DANH SÁCH TỪ DANH MỤC NHÀ GIA CÔNG ---
-        list_ngc = []
-        if not df_Doitac.empty:
-            list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].dropna().unique().tolist()
+    old_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
+    for v in old_vendors:
+        if v not in list_ngc:
+            list_ngc.append(v)
             
-        # Kéo thêm các nhà gia công cũ từ đơn hàng chưa được tạo trong Danh Mục (để không mất dữ liệu cũ)
-        old_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
-        for v in old_vendors:
-            if v not in list_ngc:
-                list_ngc.append(v)
+    if list_ngc:
+        dv_select = c2.selectbox("Chọn đơn vị gia công", list_ngc)
+    else:
+        dv_select = c2.selectbox("Chọn đơn vị gia công", ["-- Chưa có nhà gia công --"])
+    
+    st.markdown("---")
+    danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+    hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
+    
+    c3, c4 = st.columns(2)
+    ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
+    ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
+    
+    st.markdown("---")
+    c5, c6, c7 = st.columns(3)
+    tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
+    coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
+    ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
+    
+    st.markdown("---")
+    c8, c9, c10 = st.columns(3)
+    
+    btn_tao_don = c8.button("Tạo đơn hàng mới", type="primary", use_container_width=True)
+    btn_tao_anh = c9.button("Tạo file ảnh", use_container_width=True)
+    
+    if btn_tao_don:
+        if not dv_select or dv_select == "-- Chưa có nhà gia công --":
+            st.error("⚠️ Vui lòng chọn Đơn vị gia công (Nếu chưa có, hãy sang Tab E. Danh Mục để thêm)!")
+        elif not hang_muc:
+            st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+        else:
+            with st.spinner("⏳ Đang lưu đơn hàng..."):
+                con_no = tong_gia_f - coc_f
+                new_row_f = {
+                    "Mã khuôn": ma_khuon_f.strip().upper() if isinstance(ma_khuon_f, str) else str(ma_khuon_f),
+                    "Đơn vị gia công": dv_select,
+                    "Các mục gia công": ", ".join(hang_muc),
+                    "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                    "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                    "Tổng giá gia công": tong_gia_f,
+                    "Cọc đợt 1": coc_f,
+                    "Còn nợ": con_no,
+                    "Ghi chú": ghi_chu_f
+                }
+                append_data(new_row_f, "wanchi_f", df_F)
+            st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
+            time.sleep(1)
+            st.rerun()
+            
+    if btn_tao_anh:
+        if not dv_select or dv_select == "-- Chưa có nhà gia công --":
+            st.warning("⚠️ Vui lòng chọn Đơn vị gia công trước khi tạo ảnh!")
+        elif not hang_muc:
+            st.warning("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+        else:
+            with st.spinner("Đang trích xuất file ẢNH..."):
+                con_no = tong_gia_f - coc_f
+                temp_df = pd.DataFrame([{
+                    "Mã khuôn": ma_khuon_f.strip().upper() if isinstance(ma_khuon_f, str) else str(ma_khuon_f),
+                    "Đơn vị gia công": dv_select,
+                    "Các mục gia công": ", ".join(hang_muc),
+                    "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                    "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                    "Tổng giá gia công": tong_gia_f,
+                    "Cọc đợt 1": coc_f,
+                    "Còn nợ": con_no,
+                    "Ghi chú": ghi_chu_f
+                }])
                 
-        dv_options = ["(Nhập mới)"] + list_ngc
-        dv_select = c2.selectbox("Đơn vị gia công (Chọn từ Danh Mục hoặc nhập mới bên dưới)", dv_options)
-        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
-        
-        st.markdown("---")
-        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
-        hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
-        
-        c3, c4 = st.columns(2)
-        ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
-        ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
-        
-        st.markdown("---")
-        c5, c6, c7 = st.columns(3)
-        tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
-        coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
-        ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
-        
-        if st.form_submit_button("Lưu Đơn Hàng Mới"):
-            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
-            if not final_dv:
-                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
-            elif not hang_muc:
-                st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
-            else:
-                with st.spinner("⏳ Đang lưu đơn hàng..."):
-                    # Tự động đẩy Nhà gia công mới tạo vào hệ thống Danh mục nếu chưa tồn tại
-                    if final_dv not in list_ngc and final_dv != "":
-                        new_row_dt = {"Phân loại": "Nhà gia công (NGC)", "Tên đối tác": final_dv}
-                        append_data(new_row_dt, "wanchi_doitac", df_Doitac)
+                kh_str = None
+                try:
+                    row_kh = df_A[(df_A["Mã khuôn"] == ma_khuon_f) & (df_A["Tên NVL"] == "Khởi tạo khuôn")]
+                    if not row_kh.empty:
+                        kh_raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
+                        if kh_raw.startswith("KH: "):
+                            kh_str = kh_raw[4:]
+                        elif kh_raw and kh_raw.strip():
+                            kh_str = kh_raw
+                except: pass
 
-                    con_no = tong_gia_f - coc_f
-                    new_row_f = {
-                        "Mã khuôn": ma_khuon_f.strip().upper(),
-                        "Đơn vị gia công": final_dv,
-                        "Các mục gia công": ", ".join(hang_muc),
-                        "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
-                        "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
-                        "Tổng giá gia công": tong_gia_f,
-                        "Cọc đợt 1": coc_f,
-                        "Còn nợ": con_no,
-                        "Ghi chú": ghi_chu_f
-                    }
-                    append_data(new_row_f, "wanchi_f", df_F)
-                st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
-                time.sleep(1)
-                st.rerun()
+                pdf_f_temp = export_pdf(temp_df, title="ĐƠN HÀNG GIA CÔNG", ma_khuon_str=ma_khuon_f, khach_hang_str=kh_str, dvgc_str=dv_select)
+                st.session_state['img_f_new'] = convert_pdf_to_png(pdf_f_temp)
+                
+                safe_name = f"{ma_khuon_f}_{dv_select}"
+                st.session_state['file_name_f_new'] = f"WANCHI_DonHang_{safe_name}.png"
+
+    with c10:
+        if st.session_state.get('img_f_new'):
+            st.download_button("⬇️ Tải file ảnh", st.session_state['img_f_new'], st.session_state.get('file_name_f_new', "DonHang.png"), "image/png", type="primary", use_container_width=True)
 
 # ------------------------------------------
 # MODULE G: THEO DÕI ĐƠN HÀNG GIA CÔNG
