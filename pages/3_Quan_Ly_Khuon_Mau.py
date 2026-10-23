@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import time
 # --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
 if not st.session_state.get("logged_in", False):
     st.warning("🔒 Bạn chưa đăng nhập! Vui lòng quay lại Trang Chủ (Home) để gõ mật khẩu.")
@@ -49,17 +50,15 @@ def convert_pdf_to_png(pdf_bytes):
         st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
         return None
 
-# ---> HÀM XUẤT PDF (BẢN VẼ LÕI ĐỂ CHUYỂN ẢNH) <---
+# ---> HÀM XUẤT ẢNH (DỰA TRÊN BẢN VẼ LÕI PDF) <---
 def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None):
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
         df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
         
-    # Xóa cột Mã khuôn khỏi bảng
     if "Mã khuôn" in df_export.columns:
         df_export = df_export.drop(columns=["Mã khuôn"])
         
-    # Tách Đơn vị gia công ra khỏi bảng
     dvgc_text = ""
     if "Đơn vị gia công" in df_export.columns:
         unique_dv = [str(x) for x in df_export["Đơn vị gia công"].dropna().unique() if str(x).strip()]
@@ -67,13 +66,11 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
             dvgc_text = "Đơn vị gia công: " + ", ".join(unique_dv)
         df_export = df_export.drop(columns=["Đơn vị gia công"])
 
-    # Tách Ghi chú ra khỏi bảng để lập bảng riêng bên dưới
     ghi_chu_data = []
     if "Ghi chú" in df_export.columns:
         ghi_chu_data = df_export["Ghi chú"].tolist()
         df_export = df_export.drop(columns=["Ghi chú"])
     
-    # Định dạng khổ A4 Dọc (Portrait)
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     
@@ -83,7 +80,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
         font_name = 'ArialVN'
     except:
         font_name = 'Arial'
-        st.warning("⚠️ Không tìm thấy file 'arial.ttf'. Hệ thống sẽ xuất PDF không dấu để tránh lỗi.")
+        st.warning("⚠️ Không tìm thấy file 'arial.ttf'. Hệ thống sẽ xuất không dấu để tránh lỗi.")
 
     def txt(s):
         return remove_accents(str(s)) if font_name == 'Arial' else str(s)
@@ -115,7 +112,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     clean_title = "\n".join(clean_title_lines)
     pdf.multi_cell(0, 8, txt=txt(clean_title.upper()), align='C')
     
-    # --- IN THÔNG TIN PHỤ (Mã khuôn, Khách hàng, ĐVGC) (Không in hoa, Lề trái) ---
+    # --- IN THÔNG TIN PHỤ ---
     pdf.set_font(font_name, '', 12)
     pdf.ln(2)
     
@@ -140,7 +137,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     pdf.cell(0, 8, txt=txt(f"Ngày lập: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
     pdf.ln(5)
 
-    # --- THUẬT TOÁN CO GIÃN CỘT VÀ XUỐNG DÒNG VĂN BẢN (LUÔN ÉP FULL 190MM) ---
+    # --- THUẬT TOÁN CO GIÃN CỘT ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
         num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
@@ -159,14 +156,12 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                     if item_w > max_w:
                         max_w = item_w
             
-            # Cấp diện tích tối đa cho các cột chứa text để ép xuống dòng
             if col in ["Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
                 if max_w > 45: max_w = 45
             elif max_w > 50: max_w = 50
                 
             col_widths.append(max_w)
         
-        # Bắt buộc kéo giãn bảng lấp đầy khổ A4 dọc (190mm)
         total_w = sum(col_widths)
         if total_w > 0:
             scale = 190 / total_w
@@ -193,11 +188,11 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                 if lines > max_lines: max_lines = lines
                 
             row_height = max_lines * line_h
-            if pdf.get_y() + row_height > 270: # Vượt biên dưới của A4 Dọc
+            if pdf.get_y() + row_height > 270: 
                 pdf.add_page()
                 
             start_y = pdf.get_y()
-            pdf.set_x(10) # Reset X về 10 để đảm bảo mỗi dòng bảng đều bám sát lề trái
+            pdf.set_x(10)
             
             for i, val in enumerate(row_data):
                 start_x = pdf.get_x()
@@ -249,7 +244,6 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                     footer_data.append("")
             draw_row(footer_data, is_footer=True)
             
-        # --- VẼ BẢNG GHI CHÚ RIÊNG ---
         if ghi_chu_data:
             valid_gc = [str(g).strip() for g in ghi_chu_data if pd.notnull(g) and str(g).strip() != "" and str(g).strip() != "None"]
             if valid_gc:
@@ -330,7 +324,6 @@ def save_data(df, table_name):
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
-# TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU CỦA 1 KHUÔN
 def delete_mold_from_db(mold_code):
     try:
         with conn.session as session:
@@ -346,7 +339,7 @@ def delete_mold_from_db(mold_code):
 
 
 # ==========================================
-# KHỞI TẠO DỮ LIỆU TỪ DB & XỬ LÝ CỘT
+# KHỞI TẠO DỮ LIỆU TỪ DB
 # ==========================================
 cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách", "Số lượng", "Đơn giá", "Tổng tiền"]
 df_A = load_data("wanchi_a", cols_A)
@@ -354,17 +347,10 @@ df_A = df_A.loc[:, ~df_A.columns.duplicated()]
 
 cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
-
-if "Đơn giá" in df_B.columns:
-    df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
-if "Ráp khuôn hoàn thiện" in df_B.columns:
-    df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
-
+if "Đơn giá" in df_B.columns: df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+if "Ráp khuôn hoàn thiện" in df_B.columns: df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
 df_B = df_B.loc[:, ~df_B.columns.duplicated()]
-
-if "Dọn phôi" not in df_B.columns:
-    df_B["Dọn phôi"] = 0
-
+if "Dọn phôi" not in df_B.columns: df_B["Dọn phôi"] = 0
 df_B = df_B[[c for c in cols_B if c in df_B.columns]]
 
 cols_C = ["Ngày", "Nhà cung cấp vật tư", "Mã khuôn", "Tên linh kiện", "Đơn giá", "Tổng tiền"]
@@ -403,8 +389,8 @@ menu_items = [
     "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
-    "E. Danh Sách & Quản Trị",
-    "F. Tạo Đơn Hàng Gia Công",
+    "E. Danh Sách",
+    "F. Tạo Đơn Hàng",
     "G. Theo Dõi Đơn Hàng"
 ]
 
@@ -425,7 +411,7 @@ st.markdown("---")
 # ------------------------------------------
 if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
     st.header("➕ Khởi Tạo Dự Án Khuôn Mới")
-    st.info("Khi tạo khuôn mới tại đây, mã khuôn sẽ tự động xuất hiện ở tất cả các tab khác để anh/chị tiện chọn.")
+    st.info("Khuôn mới sẽ được ghi danh vào hệ thống (Danh Sách) để bạn có thể chọn khi nhập liệu, không làm rác các bảng chi tiết.")
     
     with st.form("form_tao_khuon_moi", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
@@ -445,27 +431,13 @@ if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
             else:
                 with st.spinner("⏳ Đang khởi tạo kết nối toàn hệ thống..."):
                     ngay_str = ngay_tao.strftime('%d/%m/%Y')
-                    ghi_chu_kh = f"KH: {khach_hang}" if khach_hang else ""
-                    
-                    row_a = {"Ngày": ngay_str, "Nhà cung cấp NVL": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tên NVL": "Khởi tạo khuôn", "Tổng tiền": 0}
-                    append_data(row_a, "wanchi_a", df_A)
-                    
-                    row_b = {"Ngày": ngay_str, "Đơn vị gia công": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tổng tiền": 0}
-                    append_data(row_b, "wanchi_b", df_B)
-                    
-                    row_c = {"Ngày": ngay_str, "Nhà cung cấp vật tư": ghi_chu_kh, "Mã khuôn": ma_khuon_moi, "Tên linh kiện": "Khởi tạo", "Tổng tiền": 0}
-                    append_data(row_c, "wanchi_c", df_C)
-                    
+                    # Chỉ chèn vào bảng D (Tổng kết) để định danh khuôn trong hệ thống (hiện lên Tab E), giữ sạch các bảng A, B, C, F
                     row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Gia Công (B)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
                     append_data(row_d, "wanchi_d", df_D)
                     
-                    row_f = {"Mã khuôn": ma_khuon_moi, "Đơn vị gia công": "Chưa có", "Các mục gia công": "Khởi tạo", "Thời gian nhận": ngay_str, "Thời gian bàn giao": ngay_str, "Tổng giá gia công": 0, "Cọc đợt 1": 0, "Còn nợ": 0, "Ghi chú": ghi_chu_kh}
-                    append_data(row_f, "wanchi_f", df_F)
-                    
-                st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Bây giờ anh/chị có thể sang các Tab A, B, C để nhập chi tiết.")
+                st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Mã khuôn này hiện đã có mặt trong Danh Sách để bạn chọn.")
                 time.sleep(2)
                 st.rerun()
-
 
 # ------------------------------------------
 # MODULE A: NGUYÊN VẬT LIỆU
@@ -503,14 +475,16 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
     edited_A = st.data_editor(df_A_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_A")
     edited_A["Chọn"] = edited_A["Chọn"].fillna(False).astype(bool)
     
-    col_a1, col_a2, col_a3 = st.columns(3)
-    with col_a1:
-        if st.button("💾 Cập nhật dữ liệu A", use_container_width=True):
-            with st.spinner("⏳ Đang cập nhật dữ liệu, vui lòng đợi..."):
-                save_data(edited_A.drop(columns=["Chọn"]), "wanchi_a")
-            st.success("✅ Đã cập nhật thành công!")
-            st.rerun()
+    # Nút cập nhật full size ngay dưới bảng
+    if st.button("💾 CẬP NHẬT DỮ LIỆU NGUYÊN VẬT LIỆU", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang cập nhật dữ liệu, vui lòng đợi..."):
+            save_data(edited_A.drop(columns=["Chọn"]), "wanchi_a")
+        st.success("✅ Đã cập nhật thành công!")
+        time.sleep(1)
+        st.rerun()
             
+    st.markdown("---")
+    col_a2, col_a3 = st.columns(2)
     with col_a2:
         if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_a"):
             selected_A = edited_A[edited_A["Chọn"] == True]
@@ -540,7 +514,6 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
     with col_a3:
         if st.session_state.get('img_a'):
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_a'], st.session_state.get('file_name_a', "WANCHI_NVL.png"), "image/png", type="primary", use_container_width=True)
-
 
 # ------------------------------------------
 # MODULE B: GIA CÔNG
@@ -588,14 +561,15 @@ elif st.session_state.current_tab == "B. Gia Công":
     edited_B = st.data_editor(df_B_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_B")
     edited_B["Chọn"] = edited_B["Chọn"].fillna(False).astype(bool)
     
-    col_b1, col_b2, col_b3 = st.columns(3)
-    with col_b1:
-        if st.button("💾 Cập nhật dữ liệu B", use_container_width=True):
-            with st.spinner("⏳ Đang cập nhật dữ liệu..."):
-                save_data(edited_B.drop(columns=["Chọn"]), "wanchi_b")
-            st.success("✅ Đã cập nhật thành công!")
-            st.rerun()
+    if st.button("💾 CẬP NHẬT DỮ LIỆU GIA CÔNG", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang cập nhật dữ liệu..."):
+            save_data(edited_B.drop(columns=["Chọn"]), "wanchi_b")
+        st.success("✅ Đã cập nhật thành công!")
+        time.sleep(1)
+        st.rerun()
             
+    st.markdown("---")
+    col_b2, col_b3 = st.columns(2)
     with col_b2:
         if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_b"):
             selected_B = edited_B[edited_B["Chọn"] == True]
@@ -625,7 +599,6 @@ elif st.session_state.current_tab == "B. Gia Công":
     with col_b3:
         if st.session_state.get('img_b'):
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_b'], st.session_state.get('file_name_b', "WANCHI_GiaCong.png"), "image/png", type="primary", use_container_width=True)
-
 
 # ------------------------------------------
 # MODULE C: VẬT TƯ
@@ -661,14 +634,15 @@ elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
     edited_C = st.data_editor(df_C_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_C")
     edited_C["Chọn"] = edited_C["Chọn"].fillna(False).astype(bool)
     
-    col_c1, col_c2, col_c3 = st.columns(3)
-    with col_c1:
-        if st.button("💾 Cập nhật dữ liệu C", use_container_width=True):
-            with st.spinner("⏳ Đang cập nhật dữ liệu..."):
-                save_data(edited_C.drop(columns=["Chọn"]), "wanchi_c")
-            st.success("✅ Đã cập nhật thành công!")
-            st.rerun()
+    if st.button("💾 CẬP NHẬT DỮ LIỆU VẬT TƯ", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang cập nhật dữ liệu..."):
+            save_data(edited_C.drop(columns=["Chọn"]), "wanchi_c")
+        st.success("✅ Đã cập nhật thành công!")
+        time.sleep(1)
+        st.rerun()
             
+    st.markdown("---")
+    col_c2, col_c3 = st.columns(2)
     with col_c2:
         if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_c"):
             selected_C = edited_C[edited_C["Chọn"] == True]
@@ -698,7 +672,6 @@ elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
     with col_c3:
         if st.session_state.get('img_c'):
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_c'], st.session_state.get('file_name_c', "WANCHI_VatTu.png"), "image/png", type="primary", use_container_width=True)
-
 
 # ------------------------------------------
 # MODULE D: TỔNG KẾT
@@ -736,6 +709,7 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
                     else:
                         append_data(new_row_D, "wanchi_d", df_D)
             st.success("✅ Đã tính toán xong và lưu thành công!")
+            time.sleep(1)
             st.rerun()
 
     st.markdown("---")
@@ -746,14 +720,15 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
     edited_D = st.data_editor(df_D_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_D")
     edited_D["Chọn"] = edited_D["Chọn"].fillna(False).astype(bool)
     
-    col_d1, col_d2, col_d3 = st.columns(3)
-    with col_d1:
-        if st.button("💾 Cập nhật bảng Tổng", use_container_width=True):
-            with st.spinner("⏳ Đang lưu dữ liệu..."):
-                save_data(edited_D.drop(columns=["Chọn"]), "wanchi_d")
-            st.success("✅ Đã lưu các thay đổi!")
-            st.rerun()
+    if st.button("💾 CẬP NHẬT BẢNG TỔNG", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang lưu dữ liệu..."):
+            save_data(edited_D.drop(columns=["Chọn"]), "wanchi_d")
+        st.success("✅ Đã lưu các thay đổi!")
+        time.sleep(1)
+        st.rerun()
             
+    st.markdown("---")
+    col_d2, col_d3 = st.columns(2)
     with col_d2:
         if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_d"):
             selected_D = edited_D[edited_D["Chọn"] == True]
@@ -784,11 +759,10 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
         if st.session_state.get('img_d'):
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_d'], st.session_state.get('file_name_d', "WANCHI_TongHop.png"), "image/png", type="primary", use_container_width=True)
 
-
 # ------------------------------------------
-# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP & QUẢN TRỊ
+# MODULE E: DANH SÁCH KHUÔN TỔNG HỢP
 # ------------------------------------------
-elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
+elif st.session_state.current_tab == "E. Danh Sách":
     st.header("E. Danh Sách Các Khuôn Đã Làm")
     
     danh_sach_khuon_data = []
@@ -834,7 +808,7 @@ elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
         df_E_disp = df_E.copy()
         df_E_disp.insert(0, "Chọn", False)
         
-        st.markdown("Bảng tóm tắt tự động thu thập ngày bắt đầu làm khuôn (ngày sớm nhất nhập vật liệu/gia công) và tổng giá trị cho từng mã khuôn.")
+        st.markdown("Bảng tóm tắt tự động thu thập thông tin từ hệ thống.")
         edited_E = st.data_editor(
             df_E_disp,
             column_config={
@@ -850,7 +824,9 @@ elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
         )
         edited_E["Chọn"] = edited_E["Chọn"].fillna(False).astype(bool)
         
-        col_e1, col_e2, _ = st.columns(3)
+        # Bảng E được tự động sinh ra nên không cần nút lưu Cập Nhật. Dành cho 2 nút xuất ảnh.
+        st.markdown("---")
+        col_e1, col_e2 = st.columns(2)
         with col_e1:
             if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_e"):
                 selected_E = edited_E[edited_E["Chọn"] == True]
@@ -895,6 +871,7 @@ elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
                         st.session_state.confirm_delete = False
                         st.session_state.mold_to_delete = None
                     st.success(f"🎉 Đã xóa thành công toàn bộ dữ liệu của khuôn {mold}!")
+                    time.sleep(1)
                     st.rerun()
                     
                 if c_no.button("❌ Hủy bỏ, Không xóa"):
@@ -904,11 +881,10 @@ elif st.session_state.current_tab == "E. Danh Sách & Quản Trị":
     else:
         st.info("Chưa có dữ liệu khuôn nào trong hệ thống.")
 
-
 # ------------------------------------------
 # MODULE F: TẠO ĐƠN HÀNG GIA CÔNG
 # ------------------------------------------
-elif st.session_state.current_tab == "F. Tạo Đơn Hàng Gia Công":
+elif st.session_state.current_tab == "F. Tạo Đơn Hàng":
     st.header("F. Tạo Đơn Hàng Gia Công")
     st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
@@ -957,6 +933,7 @@ elif st.session_state.current_tab == "F. Tạo Đơn Hàng Gia Công":
                     }
                     append_data(new_row_f, "wanchi_f", df_F)
                 st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
+                time.sleep(1)
                 st.rerun()
 
 # ------------------------------------------
@@ -973,14 +950,15 @@ elif st.session_state.current_tab == "G. Theo Dõi Đơn Hàng":
     edited_F = st.data_editor(df_F_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_F")
     edited_F["Chọn"] = edited_F["Chọn"].fillna(False).astype(bool)
     
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        if st.button("💾 Cập nhật dữ liệu đơn hàng", use_container_width=True):
-            with st.spinner("⏳ Đang cập nhật..."):
-                save_data(edited_F.drop(columns=["Chọn"]), "wanchi_f")
-            st.success("✅ Đã cập nhật thành công!")
-            st.rerun()
+    if st.button("💾 CẬP NHẬT DỮ LIỆU ĐƠN HÀNG", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang cập nhật..."):
+            save_data(edited_F.drop(columns=["Chọn"]), "wanchi_f")
+        st.success("✅ Đã cập nhật thành công!")
+        time.sleep(1)
+        st.rerun()
             
+    st.markdown("---")
+    col_f2, col_f3 = st.columns(2)
     with col_f2:
         if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_f"):
             selected_F = edited_F[edited_F["Chọn"] == True]
