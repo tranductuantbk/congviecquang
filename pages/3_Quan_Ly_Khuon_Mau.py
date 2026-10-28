@@ -51,8 +51,8 @@ def convert_pdf_to_png(pdf_bytes):
 
 def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None):
     df_export = df.copy()
-    if "Cụm khuôn hoàn chỉnh" in df_export.columns:
-        df_export = df_export.drop(columns=["Cụm khuôn hoàn chỉnh"])
+    if "Ráp khuôn hoàn chỉnh" in df_export.columns:
+        df_export = df_export.drop(columns=["Ráp khuôn hoàn chỉnh"])
         
     if "Mã khuôn" in df_export.columns:
         df_export = df_export.drop(columns=["Mã khuôn"])
@@ -298,10 +298,12 @@ cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách",
 df_A = load_data("wanchi_a", cols_A)
 df_A = df_A.loc[:, ~df_A.columns.duplicated()]
 
-cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
+# --- CẬP NHẬT: Đổi tên cột Cụm khuôn thành Ráp khuôn ---
+cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn chỉnh", "Tổng tiền"]
 df_B = load_data("wanchi_b", cols_B)
-if "Đơn giá" in df_B.columns: df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
-if "Ráp khuôn hoàn thiện" in df_B.columns: df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+if "Đơn giá" in df_B.columns: df_B.rename(columns={"Đơn giá": "Ráp khuôn hoàn chỉnh"}, inplace=True)
+if "Cụm khuôn hoàn chỉnh" in df_B.columns: df_B.rename(columns={"Cụm khuôn hoàn chỉnh": "Ráp khuôn hoàn chỉnh"}, inplace=True)
+if "Ráp khuôn hoàn thiện" in df_B.columns: df_B.rename(columns={"Ráp khuôn hoàn thiện": "Ráp khuôn hoàn chỉnh"}, inplace=True)
 df_B = df_B.loc[:, ~df_B.columns.duplicated()]
 if "Dọn phôi" not in df_B.columns: df_B["Dọn phôi"] = 0
 df_B = df_B[[c for c in cols_B if c in df_B.columns]]
@@ -492,7 +494,8 @@ elif st.session_state.current_tab == "B. Gia Công":
             
             c10, c11, _ = st.columns(3)
             don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
-            rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1)
+            # --- CẬP NHẬT: Đổi tên thành Ráp khuôn hoàn chỉnh ---
+            rap_khuon = c11.number_input("Ráp khuôn hoàn chỉnh", min_value=0, step=1)
             
             st.markdown("---")
             _, c12 = st.columns([3, 1])
@@ -503,7 +506,7 @@ elif st.session_state.current_tab == "B. Gia Công":
                     new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
                                  "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
                                  "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
-                                 "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
+                                 "Ráp khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
                     append_data(new_row_b, "wanchi_b", df_B)
                 st.rerun()
 
@@ -580,7 +583,7 @@ elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
                     append_data(new_row_c, "wanchi_c", df_C)
                 st.rerun()
 
-    st.subheader("Bảng Dữ Liệu Vật Tư")
+    st.subheader("Bảng Dữ Tại Vật Tư")
     df_C_disp = df_C.copy()
     df_C_disp.insert(0, "Chọn", False)
     
@@ -805,13 +808,22 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
         c1, c2 = st.columns(2)
         ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
         
-        list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].tolist() if not df_Doitac.empty else []
-        dv_options = ["(Nhập mới)"] + list_ngc
-        dv_select = c2.selectbox("Đơn vị gia công (Chọn NGC từ Danh Mục hoặc nhập mới)", dv_options)
-        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
+        list_ngc = []
+        if not df_Doitac.empty:
+            list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].dropna().unique().tolist()
+            
+        old_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
+        for v in old_vendors:
+            if v not in list_ngc:
+                list_ngc.append(v)
+                
+        if list_ngc:
+            dv_select = c2.selectbox("Chọn đơn vị gia công", list_ngc)
+        else:
+            dv_select = c2.selectbox("Chọn đơn vị gia công", ["-- Chưa có nhà gia công --"])
         
         st.markdown("---")
-        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn chỉnh"]
         hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
         
         c3, c4 = st.columns(2)
@@ -824,22 +836,18 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
         coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
         ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
         
-        if st.form_submit_button("Lưu Đơn Hàng Mới"):
-            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
-            if not final_dv:
-                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
+        if st.form_submit_button("Tạo đơn hàng mới"):
+            final_dv = dv_select
+            if not final_dv or final_dv == "-- Chưa có nhà gia công --":
+                st.error("⚠️ Vui lòng chọn Đơn vị gia công (Nếu chưa có, hãy sang Tab E. Danh Mục để thêm)!")
             elif not hang_muc:
                 st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
             else:
                 with st.spinner("⏳ Đang lưu đơn hàng..."):
-                    if dv_select == "(Nhập mới)" and final_dv.strip():
-                        new_ngc = {"Phân loại": "Nhà gia công (NGC)", "Tên đối tác": final_dv.strip()}
-                        append_data(new_ngc, "wanchi_doitac", df_Doitac)
-                        
                     con_no = tong_gia_f - coc_f
                     new_row_f = {
                         "Mã khuôn": ma_khuon_f.strip().upper(),
-                        "Đơn vị gia công": final_dv.strip(),
+                        "Đơn vị gia công": final_dv,
                         "Các mục gia công": ", ".join(hang_muc),
                         "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
                         "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
