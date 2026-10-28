@@ -37,7 +37,6 @@ except ImportError:
     HAS_FITZ = False
 
 def convert_pdf_to_png(pdf_bytes):
-    """Hàm chuyển byte PDF thành byte Ảnh PNG độ nét cao"""
     if not HAS_FITZ:
         st.error("⚠️ Hệ thống thiếu thư viện 'PyMuPDF' để xuất ảnh. Vui lòng chạy lệnh: pip install PyMuPDF")
         return None
@@ -50,7 +49,6 @@ def convert_pdf_to_png(pdf_bytes):
         st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
         return None
 
-# ---> HÀM XUẤT ẢNH (DỰA TRÊN BẢN VẼ LÕI PDF) <---
 def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None):
     df_export = df.copy()
     if "Cụm khuôn hoàn chỉnh" in df_export.columns:
@@ -80,12 +78,10 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
         font_name = 'ArialVN'
     except:
         font_name = 'Arial'
-        st.warning("⚠️ Không tìm thấy file 'arial.ttf'. Hệ thống sẽ xuất không dấu để tránh lỗi.")
 
     def txt(s):
         return remove_accents(str(s)) if font_name == 'Arial' else str(s)
 
-    # --- XỬ LÝ LOGO VÀ ĐỊA CHỈ ---
     logo_path = "logo.png" 
     try:
         if os.path.exists(logo_path):
@@ -99,12 +95,10 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     pdf.set_xy(start_x, 15)
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 5, txt=txt("775 Võ Hữu Lợi, Xã Lê Minh Xuân, Huyện Bình Chánh, TP.HCM"), ln=True, align='L')
-    
     pdf.set_x(start_x)
     pdf.cell(0, 5, txt=txt("SĐT: 0937.572.577"), ln=True, align='L')
     pdf.ln(12)
 
-    # --- IN TIÊU ĐỀ CHÍNH ---
     pdf.set_x(10)
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     
@@ -112,22 +106,18 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     clean_title = "\n".join(clean_title_lines)
     pdf.multi_cell(0, 8, txt=txt(clean_title.upper()), align='C')
     
-    # --- IN THÔNG TIN PHỤ ---
     pdf.set_font(font_name, '', 12)
     pdf.ln(2)
     
     if ma_khuon_str:
         pdf.set_x(10)
         pdf.multi_cell(0, 6, txt=txt(f"Mã khuôn: {ma_khuon_str}"), align='L')
-        
     if khach_hang_str:
         pdf.set_x(10)
         pdf.multi_cell(0, 6, txt=txt(f"Khách hàng: {khach_hang_str}"), align='L')
-        
     if dvgc_str:
         pdf.set_x(10)
         pdf.multi_cell(0, 6, txt=txt(f"Đơn vị gia công: {dvgc_str}"), align='L')
-        
     if dvgc_text and not dvgc_str:
         pdf.set_x(10)
         pdf.multi_cell(0, 6, txt=txt(dvgc_text), align='L')
@@ -137,10 +127,9 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     pdf.cell(0, 8, txt=txt(f"Ngày lập: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align='C')
     pdf.ln(5)
 
-    # --- THUẬT TOÁN CO GIÃN CỘT ---
     if not df_export.empty:
         pdf.set_font(font_name, '', 8)
-        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
+        num_cols = ["Số lượng", "Đơn giá", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Tổng tiền", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG", "Tổng giá trị khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ"]
         
         col_widths = []
         for col in df_export.columns:
@@ -150,16 +139,13 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                 if col in num_cols and val_str.strip() != "":
                     try: val_str = f"{float(item):,.0f}".replace(",", ".")
                     except: pass
-                
                 for para in val_str.split('\n'):
                     item_w = pdf.get_string_width(txt(para)) + 4
                     if item_w > max_w:
                         max_w = item_w
-            
             if col in ["Các mục gia công", "Tên NVL", "Tên linh kiện", "Quy cách", "Nhà cung cấp NVL", "Khách hàng"]:
                 if max_w > 45: max_w = 45
             elif max_w > 50: max_w = 50
-                
             col_widths.append(max_w)
         
         total_w = sum(col_widths)
@@ -190,15 +176,12 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
             row_height = max_lines * line_h
             if pdf.get_y() + row_height > 270: 
                 pdf.add_page()
-                
             start_y = pdf.get_y()
             pdf.set_x(10)
-            
             for i, val in enumerate(row_data):
                 start_x = pdf.get_x()
                 align_col = 'C' if is_header else ('R' if df_export.columns[i] in num_cols else 'L')
                 if is_footer and i == len(df_export.columns) - 2: align_col = 'R'
-                
                 if is_header:
                     pdf.set_fill_color(220, 220, 220)
                     pdf.rect(start_x, start_y, col_widths[i], row_height, style='DF')
@@ -207,10 +190,8 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                     pdf.rect(start_x, start_y, col_widths[i], row_height, style='DF')
                 else:
                     pdf.rect(start_x, start_y, col_widths[i], row_height)
-                    
                 pdf.multi_cell(col_widths[i], line_h, val, border=0, align=align_col)
                 pdf.set_xy(start_x + col_widths[i], start_y)
-                
             pdf.set_y(start_y + row_height)
 
         pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 8)
@@ -252,32 +233,18 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
                 pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
                 pdf.set_fill_color(220, 220, 220)
                 pdf.cell(190, 8, txt=txt("GHI CHÚ"), border=1, ln=True, align='C', fill=True)
-                
                 pdf.set_x(10)
                 pdf.set_font(font_name, '', 9)
-                
-                if len(valid_gc) > 1:
-                    combined_gc = "\n".join([f"- {g}" for g in valid_gc])
-                else:
-                    combined_gc = valid_gc[0]
-                    
+                combined_gc = "\n".join([f"- {g}" for g in valid_gc]) if len(valid_gc) > 1 else valid_gc[0]
                 pdf.multi_cell(190, 6, txt=txt(combined_gc), border=1, align='L')
             
     temp_filename = f"temp_report_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
-    
     with open(temp_filename, "rb") as f:
         pdf_bytes = f.read()
-        
     if os.path.exists(temp_filename):
         os.remove(temp_filename)
-        
     return pdf_bytes
-
-
-# ==========================================
-# KIẾN TRÚC BỘ NHỚ ĐỆM (CACHE) CỰC NHANH
-# ==========================================
 
 @st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
@@ -324,20 +291,6 @@ def save_data(df, table_name):
     except Exception as e:
         st.error(f"⚠️ Lỗi khi lưu dữ liệu lên đám mây ({table_name}): {str(e)}")
 
-def delete_mold_from_db(mold_code):
-    try:
-        with conn.session as session:
-            session.execute(text('DELETE FROM wanchi_a WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_b WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_c WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_d WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.execute(text('DELETE FROM wanchi_f WHERE "Mã khuôn" = :m'), {"m": mold_code})
-            session.commit()
-        force_reload_cache()
-    except Exception as e:
-        st.error(f"⚠️ Lỗi khi xóa khuôn trên database: {str(e)}")
-
-
 # ==========================================
 # KHỞI TẠO DỮ LIỆU TỪ DB
 # ==========================================
@@ -345,11 +298,19 @@ cols_A = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách",
 df_A = load_data("wanchi_a", cols_A)
 df_A = df_A.loc[:, ~df_A.columns.duplicated()]
 
+cols_B = ["Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Cụm khuôn hoàn chỉnh", "Tổng tiền"]
+df_B = load_data("wanchi_b", cols_B)
+if "Đơn giá" in df_B.columns: df_B.rename(columns={"Đơn giá": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+if "Ráp khuôn hoàn thiện" in df_B.columns: df_B.rename(columns={"Ráp khuôn hoàn thiện": "Cụm khuôn hoàn chỉnh"}, inplace=True)
+df_B = df_B.loc[:, ~df_B.columns.duplicated()]
+if "Dọn phôi" not in df_B.columns: df_B["Dọn phôi"] = 0
+df_B = df_B[[c for c in cols_B if c in df_B.columns]]
+
 cols_C = ["Ngày", "Nhà cung cấp vật tư", "Mã khuôn", "Tên linh kiện", "Đơn giá", "Tổng tiền"]
 df_C = load_data("wanchi_c", cols_C)
 df_C = df_C.loc[:, ~df_C.columns.duplicated()]
 
-cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
+cols_D = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
 df_D = load_data("wanchi_d", cols_D)
 df_D = df_D.loc[:, ~df_D.columns.duplicated()]
 
@@ -357,18 +318,17 @@ cols_F = ["Mã khuôn", "Đơn vị gia công", "Các mục gia công", "Thời 
 df_F = load_data("wanchi_f", cols_F)
 df_F = df_F.loc[:, ~df_F.columns.duplicated()]
 
-# Dữ liệu Bảng Đối tác mới (NCC, NGC)
 cols_Doitac = ["Phân loại", "Tên đối tác"]
 df_Doitac = load_data("wanchi_doitac", cols_Doitac)
 df_Doitac = df_Doitac.loc[:, ~df_Doitac.columns.duplicated()]
 
 all_molds_set = set()
 if not df_A.empty: all_molds_set.update(df_A["Mã khuôn"].dropna().unique())
+if not df_B.empty: all_molds_set.update(df_B["Mã khuôn"].dropna().unique())
 if not df_C.empty: all_molds_set.update(df_C["Mã khuôn"].dropna().unique())
 if not df_D.empty: all_molds_set.update(df_D["Mã khuôn"].dropna().unique())
 if not df_F.empty: all_molds_set.update(df_F["Mã khuôn"].dropna().unique())
 list_molds_master = sorted(list(all_molds_set))
-
 
 # ==========================================
 # GIAO DIỆN CHÍNH & LƯỚI ĐIỀU HƯỚNG
@@ -382,6 +342,7 @@ if "current_tab" not in st.session_state:
 menu_items = [
     "➕ Tạo Khuôn Mới",
     "A. Nguyên Vật Liệu", 
+    "B. Gia Công", 
     "C. Vật Tư Khuôn Mẫu", 
     "D. Tổng Giá Khuôn",
     "E. Danh Mục",
@@ -426,9 +387,8 @@ if st.session_state.current_tab == "➕ Tạo Khuôn Mới":
             else:
                 with st.spinner("⏳ Đang khởi tạo kết nối toàn hệ thống..."):
                     ngay_str = ngay_tao.strftime('%d/%m/%Y')
-                    row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
+                    row_d = {"Ngày": ngay_str, "Mã khuôn": ma_khuon_moi, "Tổng Nguyên Vật Liệu (A)": 0, "Tổng Gia Công (B)": 0, "Tổng Vật Tư (C)": 0, "TỔNG CỘNG": 0}
                     append_data(row_d, "wanchi_d", df_D)
-                    
                 st.success(f"🎉 Khởi tạo khuôn **{ma_khuon_moi}** thành công! Mã khuôn này hiện đã có mặt trong Danh Mục để bạn chọn.")
                 time.sleep(2)
                 st.rerun()
@@ -509,6 +469,91 @@ elif st.session_state.current_tab == "A. Nguyên Vật Liệu":
             st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_a'], st.session_state.get('file_name_a', "WANCHI_NVL.png"), "image/png", type="primary", use_container_width=True)
 
 # ------------------------------------------
+# MODULE B: GIA CÔNG
+# ------------------------------------------
+elif st.session_state.current_tab == "B. Gia Công":
+    st.header("B. Gia Công")
+    with st.expander("➕ Nhập Chi Phí Gia Công Mới"):
+        with st.form("form_B"):
+            c1, c2, c3 = st.columns(3)
+            ngay_b = c1.date_input("Ngày", datetime.today(), key="ngay_b")
+            ncc_b = c2.text_input("Đơn vị gia công")
+            ma_khuon_b = c3.selectbox("Chọn mã khuôn:", list_molds_master) if list_molds_master else c3.text_input("Mã khuôn")
+            
+            c4, c5, c6 = st.columns(3)
+            cat_day = c4.number_input("Cắt dây", min_value=0, step=1)
+            xung_dien = c5.number_input("Xung điện (EDM)", min_value=0, step=1)
+            phay_cnc = c6.number_input("Phay CNC", min_value=0, step=1)
+            
+            c7, c8, c9 = st.columns(3)
+            nhiet_luyen = c7.number_input("Nhiệt Luyện", min_value=0, step=1)
+            danh_bong = c8.number_input("Đánh bóng", min_value=0, step=1)
+            nham = c9.number_input("Tạo Nhám hoa văn", min_value=0, step=1)
+            
+            c10, c11, _ = st.columns(3)
+            don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
+            rap_khuon = c11.number_input("Cụm khuôn hoàn chỉnh", min_value=0, step=1)
+            
+            st.markdown("---")
+            _, c12 = st.columns([3, 1])
+            tong_tien_b = c12.number_input("💰 Tổng tiền (Tự nhập)", min_value=0, step=1, key="tong_tien_b")
+            
+            if st.form_submit_button("Lưu Dữ Liệu Gia Công"):
+                with st.spinner("⏳ Đang lưu dữ liệu..."):
+                    new_row_b = {"Ngày": ngay_b.strftime('%d/%m/%Y'), "Đơn vị gia công": ncc_b, "Mã khuôn": ma_khuon_b.strip().upper(),
+                                 "Cắt dây": cat_day, "Xung điện (EDM)": xung_dien, "Phay CNC": phay_cnc, "Nhiệt Luyện": nhiet_luyen,
+                                 "Đánh bóng": danh_bong, "Tạo Nhám hoa văn": nham, "Dọn phôi": don_phoi, 
+                                 "Cụm khuôn hoàn chỉnh": rap_khuon, "Tổng tiền": tong_tien_b}
+                    append_data(new_row_b, "wanchi_b", df_B)
+                st.rerun()
+
+    st.subheader("Bảng Dữ Liệu Gia Công")
+    df_B_disp = df_B.copy()
+    df_B_disp.insert(0, "Chọn", False)
+    
+    edited_B = st.data_editor(df_B_disp, num_rows="dynamic", use_container_width=True, hide_index=True, key="edit_B")
+    edited_B["Chọn"] = edited_B["Chọn"].fillna(False).astype(bool)
+    
+    if st.button("💾 CẬP NHẬT DỮ LIỆU GIA CÔNG", type="primary", use_container_width=True):
+        with st.spinner("⏳ Đang cập nhật dữ liệu..."):
+            save_data(edited_B.drop(columns=["Chọn"]), "wanchi_b")
+        st.success("✅ Đã cập nhật thành công!")
+        time.sleep(1)
+        st.rerun()
+            
+    st.markdown("---")
+    col_b2, col_b3 = st.columns(2)
+    with col_b2:
+        if st.button("🖼️ Tạo file ẢNH", use_container_width=True, key="btn_img_b"):
+            selected_B = edited_B[edited_B["Chọn"] == True]
+            if selected_B.empty:
+                st.warning("⚠️ Vui lòng tick chọn ít nhất 1 dòng để xuất ảnh!")
+            else:
+                with st.spinner("Đang trích xuất file ẢNH..."):
+                    unique_molds = selected_B["Mã khuôn"].dropna().unique().tolist()
+                    filter_pdf_b = unique_molds[0] if len(unique_molds) == 1 else "NHIỀU MÃ KHUÔN"
+                    
+                    kh_str = None
+                    if filter_pdf_b != "NHIỀU MÃ KHUÔN":
+                        try:
+                            row_kh = df_A[(df_A["Mã khuôn"] == filter_pdf_b) & (df_A["Tên NVL"] == "Khởi tạo khuôn")]
+                            if not row_kh.empty:
+                                kh_raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
+                                if kh_raw.startswith("KH: "):
+                                    kh_str = kh_raw[4:]
+                                elif kh_raw and kh_raw.strip():
+                                    kh_str = kh_raw
+                        except: pass
+                    
+                    pdf_b = export_pdf(selected_B.drop(columns=["Chọn"]), title="BÁO CÁO CHI PHÍ GIA CÔNG", ma_khuon_str=filter_pdf_b if filter_pdf_b != "NHIỀU MÃ KHUÔN" else None, khach_hang_str=kh_str)
+                    st.session_state['img_b'] = convert_pdf_to_png(pdf_b)
+                    st.session_state['file_name_b'] = f"WANCHI_GiaCong_{filter_pdf_b}.png"
+                    
+    with col_b3:
+        if st.session_state.get('img_b'):
+            st.download_button("⬇️ Tải ẢNH Xuống", st.session_state['img_b'], st.session_state.get('file_name_b', "WANCHI_GiaCong.png"), "image/png", type="primary", use_container_width=True)
+
+# ------------------------------------------
 # MODULE C: VẬT TƯ
 # ------------------------------------------
 elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
@@ -535,7 +580,7 @@ elif st.session_state.current_tab == "C. Vật Tư Khuôn Mẫu":
                     append_data(new_row_c, "wanchi_c", df_C)
                 st.rerun()
 
-    st.subheader("Bảng Dữ Tại Vật Tư")
+    st.subheader("Bảng Dữ Liệu Vật Tư")
     df_C_disp = df_C.copy()
     df_C_disp.insert(0, "Chọn", False)
     
@@ -588,21 +633,23 @@ elif st.session_state.current_tab == "D. Tổng Giá Khuôn":
     st.header("D. Tổng Hợp Giá Trị Khuôn")
     
     with st.expander("🔄 Cập Nhật Tổng Giá Tự Động"):
-        st.write("Chọn mã khuôn để tự động quét toàn bộ chi phí từ 2 Module trên (A, C):")
+        st.write("Chọn mã khuôn để tự động quét toàn bộ chi phí từ 3 Module trên:")
         selected_mold = st.selectbox("Mã Khuôn Cần Tổng Kết:", list_molds_master, key="mold_total")
         
         if st.button("🧮 Tính Toán Bảng Tổng"):
             with st.spinner("⏳ Đang xử lý tính toán..."):
                 if selected_mold:
                     sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
+                    sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
                     sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == selected_mold]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
                     
-                    total = sum_A + sum_C
+                    total = sum_A + sum_B + sum_C
                     
                     new_row_D = {
                         "Ngày": datetime.today().strftime('%d/%m/%Y'),
                         "Mã khuôn": selected_mold,
                         "Tổng Nguyên Vật Liệu (A)": sum_A,
+                        "Tổng Gia Công (B)": sum_B,
                         "Tổng Vật Tư (C)": sum_C,
                         "TỔNG CỘNG": total
                     }
@@ -681,7 +728,7 @@ elif st.session_state.current_tab == "E. Danh Mục":
         danh_sach_khuon_data = []
         for mk in list_molds_master:
             dates = []
-            for df_temp in [df_A, df_C]:
+            for df_temp in [df_A, df_B, df_C]:
                 if not df_temp.empty and 'Mã khuôn' in df_temp.columns and 'Ngày' in df_temp.columns:
                     mold_dates = df_temp[df_temp['Mã khuôn'] == mk]['Ngày'].dropna().tolist()
                     dates.extend(mold_dates)
@@ -705,8 +752,9 @@ elif st.session_state.current_tab == "E. Danh Mục":
             
             if tong_gia == 0:
                 sum_A = pd.to_numeric(df_A[df_A["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_A.empty else 0
+                sum_B = pd.to_numeric(df_B[df_B["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_B.empty else 0
                 sum_C = pd.to_numeric(df_C[df_C["Mã khuôn"] == mk]["Tổng tiền"], errors='coerce').sum() if not df_C.empty else 0
-                tong_gia = sum_A + sum_C
+                tong_gia = sum_A + sum_B + sum_C
                 
             danh_sach_khuon_data.append({
                 "Ngày bắt đầu": ngay_lam,
@@ -741,7 +789,6 @@ elif st.session_state.current_tab == "E. Danh Mục":
                 else:
                     st.warning("⚠️ Vui lòng nhập tên Đối tác!")
                     
-        # Hiển thị bảng đối tác (chỉ đọc)
         if not df_Doitac.empty:
             st.dataframe(df_Doitac, use_container_width=True, hide_index=True)
         else:
@@ -754,108 +801,57 @@ elif st.session_state.current_tab == "F. Tạo đơn Gia công":
     st.header("F. Tạo đơn Gia công")
     st.markdown("Khởi tạo đơn hàng mới, đặt cọc và các hạng mục thuê gia công.")
     
-    c1, c2 = st.columns(2)
-    ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
-    
-    # LẤY DANH SÁCH TỪ DANH MỤC NHÀ GIA CÔNG
-    list_ngc = []
-    if not df_Doitac.empty:
-        list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].dropna().unique().tolist()
+    with st.form("form_f"):
+        c1, c2 = st.columns(2)
+        ma_khuon_f = c1.selectbox("Mã khuôn", list_molds_master) if list_molds_master else c1.text_input("Mã khuôn")
         
-    old_vendors = df_F["Đơn vị gia công"].dropna().unique().tolist() if not df_F.empty else []
-    for v in old_vendors:
-        if v not in list_ngc:
-            list_ngc.append(v)
-            
-    if list_ngc:
-        dv_select = c2.selectbox("Chọn đơn vị gia công", list_ngc)
-    else:
-        dv_select = c2.selectbox("Chọn đơn vị gia công", ["-- Chưa có nhà gia công --"])
-    
-    st.markdown("---")
-    danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
-    hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
-    
-    c3, c4 = st.columns(2)
-    ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
-    ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
-    
-    st.markdown("---")
-    c5, c6, c7 = st.columns(3)
-    tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
-    coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
-    ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
-    
-    st.markdown("---")
-    c8, c9, c10 = st.columns(3)
-    
-    btn_tao_don = c8.button("Tạo đơn hàng mới", type="primary", use_container_width=True)
-    btn_tao_anh = c9.button("Tạo file ảnh", use_container_width=True)
-    
-    if btn_tao_don:
-        if not dv_select or dv_select == "-- Chưa có nhà gia công --":
-            st.error("⚠️ Vui lòng chọn Đơn vị gia công (Nếu chưa có, hãy sang Tab E. Danh Mục để thêm)!")
-        elif not hang_muc:
-            st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
-        else:
-            with st.spinner("⏳ Đang lưu đơn hàng..."):
-                con_no = tong_gia_f - coc_f
-                new_row_f = {
-                    "Mã khuôn": ma_khuon_f.strip().upper() if isinstance(ma_khuon_f, str) else str(ma_khuon_f),
-                    "Đơn vị gia công": dv_select,
-                    "Các mục gia công": ", ".join(hang_muc),
-                    "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
-                    "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
-                    "Tổng giá gia công": tong_gia_f,
-                    "Cọc đợt 1": coc_f,
-                    "Còn nợ": con_no,
-                    "Ghi chú": ghi_chu_f
-                }
-                append_data(new_row_f, "wanchi_f", df_F)
-            st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
-            time.sleep(1)
-            st.rerun()
-            
-    if btn_tao_anh:
-        if not dv_select or dv_select == "-- Chưa có nhà gia công --":
-            st.warning("⚠️ Vui lòng chọn Đơn vị gia công trước khi tạo ảnh!")
-        elif not hang_muc:
-            st.warning("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
-        else:
-            with st.spinner("Đang trích xuất file ẢNH..."):
-                con_no = tong_gia_f - coc_f
-                temp_df = pd.DataFrame([{
-                    "Mã khuôn": ma_khuon_f.strip().upper() if isinstance(ma_khuon_f, str) else str(ma_khuon_f),
-                    "Đơn vị gia công": dv_select,
-                    "Các mục gia công": ", ".join(hang_muc),
-                    "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
-                    "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
-                    "Tổng giá gia công": tong_gia_f,
-                    "Cọc đợt 1": coc_f,
-                    "Còn nợ": con_no,
-                    "Ghi chú": ghi_chu_f
-                }])
-                
-                kh_str = None
-                try:
-                    row_kh = df_A[(df_A["Mã khuôn"] == ma_khuon_f) & (df_A["Tên NVL"] == "Khởi tạo khuôn")]
-                    if not row_kh.empty:
-                        kh_raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
-                        if kh_raw.startswith("KH: "):
-                            kh_str = kh_raw[4:]
-                        elif kh_raw and kh_raw.strip():
-                            kh_str = kh_raw
-                except: pass
-
-                pdf_f_temp = export_pdf(temp_df, title="ĐƠN HÀNG GIA CÔNG", ma_khuon_str=ma_khuon_f, khach_hang_str=kh_str, dvgc_str=dv_select)
-                st.session_state['img_f_new'] = convert_pdf_to_png(pdf_f_temp)
-                
-                safe_name = f"{ma_khuon_f}_{dv_select}"
-                st.session_state['file_name_f_new'] = f"WANCHI_DonHang_{safe_name}.png"
-
-    with c10:
-        if st.session_state.get('img_f_new'):
-            st.download_button("⬇️ Tải file ảnh", st.session_state['img_f_new'], st.session_state.get('file_name_f_new', "DonHang.png"), "image/png", type="primary", use_container_width=True)
+        list_ngc = df_Doitac[df_Doitac["Phân loại"] == "Nhà gia công (NGC)"]["Tên đối tác"].tolist() if not df_Doitac.empty else []
+        dv_options = ["(Nhập mới)"] + list_ngc
+        dv_select = c2.selectbox("Đơn vị gia công (Chọn NGC từ Danh Mục hoặc nhập mới)", dv_options)
+        dv_new = c2.text_input("Nhập tên Đơn vị gia công mới (Chỉ nhập nếu chọn '(Nhập mới)')")
+        
+        st.markdown("---")
+        danh_sach_hang_muc = ["Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện", "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn thiện"]
+        hang_muc = st.multiselect("Các hạng mục cần gia công:", danh_sach_hang_muc)
+        
+        c3, c4 = st.columns(2)
+        ngay_nhan = c3.date_input("Thời gian nhận phôi/khuôn")
+        ngay_giao = c4.date_input("Thời gian bàn giao (Dự kiến)")
+        
+        st.markdown("---")
+        c5, c6, c7 = st.columns(3)
+        tong_gia_f = c5.number_input("Tổng giá gia công", min_value=0, step=1)
+        coc_f = c6.number_input("Cọc đợt 1", min_value=0, step=1)
+        ghi_chu_f = c7.text_area("Ghi chú (Tự động kéo giãn khi xuất bảng)")
+        
+        if st.form_submit_button("Lưu Đơn Hàng Mới"):
+            final_dv = dv_new if dv_select == "(Nhập mới)" else dv_select
+            if not final_dv:
+                st.error("⚠️ Vui lòng nhập tên Đơn vị gia công!")
+            elif not hang_muc:
+                st.error("⚠️ Vui lòng chọn ít nhất 1 hạng mục gia công!")
+            else:
+                with st.spinner("⏳ Đang lưu đơn hàng..."):
+                    if dv_select == "(Nhập mới)" and final_dv.strip():
+                        new_ngc = {"Phân loại": "Nhà gia công (NGC)", "Tên đối tác": final_dv.strip()}
+                        append_data(new_ngc, "wanchi_doitac", df_Doitac)
+                        
+                    con_no = tong_gia_f - coc_f
+                    new_row_f = {
+                        "Mã khuôn": ma_khuon_f.strip().upper(),
+                        "Đơn vị gia công": final_dv.strip(),
+                        "Các mục gia công": ", ".join(hang_muc),
+                        "Thời gian nhận": ngay_nhan.strftime('%d/%m/%Y'),
+                        "Thời gian bàn giao": ngay_giao.strftime('%d/%m/%Y'),
+                        "Tổng giá gia công": tong_gia_f,
+                        "Cọc đợt 1": coc_f,
+                        "Còn nợ": con_no,
+                        "Ghi chú": ghi_chu_f
+                    }
+                    append_data(new_row_f, "wanchi_f", df_F)
+                st.success("✅ Đã tạo đơn hàng gia công mới thành công!")
+                time.sleep(1)
+                st.rerun()
 
 # ------------------------------------------
 # MODULE G: THEO DÕI ĐƠN HÀNG GIA CÔNG
