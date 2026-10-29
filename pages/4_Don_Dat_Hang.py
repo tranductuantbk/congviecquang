@@ -17,10 +17,6 @@ if not st.session_state.get("logged_in", False):
 # ==========================================
 st.set_page_config(page_title="Tuấn Quang - Đơn Đặt Hàng & Giao Việc", layout="wide")
 
-IMG_DIR = "attached_images"
-if not os.path.exists(IMG_DIR):
-    os.makedirs(IMG_DIR)
-
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
@@ -57,7 +53,9 @@ def convert_pdf_to_png(pdf_bytes):
 
 # ---> HÀM XUẤT PDF <---
 def export_pdf(df, title):
-    df_table = df.drop(columns=["Hình ảnh"], errors="ignore")
+    # Loại bỏ những cột không cần thiết để bảng gọn hơn
+    drop_cols = ["Hình ảnh", "Ghi chú"]
+    df_table = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
     
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -103,7 +101,8 @@ def export_pdf(df, title):
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
                         except: pass
-                item_w = min(pdf.get_string_width(val_str) + 4, 65) 
+                # Điều chỉnh độ rộng tối đa của các cột văn bản để chữ không bị tràn ngang
+                item_w = min(pdf.get_string_width(val_str) + 4, 80) 
                 if item_w > max_w:
                     max_w = item_w
             col_widths.append(max_w)
@@ -273,8 +272,8 @@ with tab_TaoDon:
             st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
             st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách kéo xuống dưới cùng.")
             
-            # Khởi tạo bảng nhập liệu công việc
-            df_nd_init = pd.DataFrame([{"STT": 1, "Nội dung công việc": "", "Ảnh đính kèm": "", "Ghi chú": ""}])
+            # Bảng nhập liệu đã loại bỏ cột ảnh
+            df_nd_init = pd.DataFrame([{"STT": 1, "Nội dung công việc": "", "Ghi chú": ""}])
             noi_dung_tb = st.data_editor(
                 df_nd_init,
                 num_rows="dynamic",
@@ -282,8 +281,7 @@ with tab_TaoDon:
                 hide_index=True,
                 column_config={
                     "STT": st.column_config.NumberColumn("STT", width="small"),
-                    "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc", width="large"),
-                    "Ảnh đính kèm": st.column_config.TextColumn("Ảnh đính kèm (Link/Tên)", width="medium"),
+                    "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc (Kích thước, yêu cầu)", width="large"),
                     "Ghi chú": st.column_config.TextColumn("Ghi chú", width="medium"),
                 }
             )
@@ -304,14 +302,13 @@ with tab_TaoDon:
                     st.error("⚠️ Vui lòng nhập Tên hạng mục và Đơn vị nhận thầu!")
                 else:
                     with st.spinner("⏳ Đang lưu dữ liệu và xuất phiếu..."):
-                        # Trích xuất dữ liệu từ bảng thành chuỗi văn bản gọn gàng
+                        # Trích xuất dữ liệu từ bảng thành chuỗi văn bản gọn gàng (Không có ảnh)
                         noi_dung_lines = []
                         for _, row in noi_dung_tb.iterrows():
                             if pd.notna(row['Nội dung công việc']) and str(row['Nội dung công việc']).strip() != "":
                                 stt_val = f"{int(row['STT'])}." if pd.notna(row['STT']) else "-"
-                                anh_val = f" [Ảnh: {row['Ảnh đính kèm']}]" if pd.notna(row['Ảnh đính kèm']) and str(row['Ảnh đính kèm']).strip() else ""
                                 gc_val = f" ({row['Ghi chú']})" if pd.notna(row['Ghi chú']) and str(row['Ghi chú']).strip() else ""
-                                noi_dung_lines.append(f"{stt_val} {row['Nội dung công việc']}{anh_val}{gc_val}")
+                                noi_dung_lines.append(f"{stt_val} {row['Nội dung công việc']}{gc_val}")
                         
                         noi_dung_final = "\n".join(noi_dung_lines)
 
@@ -321,7 +318,7 @@ with tab_TaoDon:
                             "Hạng mục / Dự án": ten_du_an,
                             "Đơn vị nhận thầu": nha_thau,
                             "Nội dung chi tiết": noi_dung_final,
-                            "Hình ảnh": "", # Bỏ chức năng upload ảnh gốc nên để rỗng
+                            "Hình ảnh": "", # Để rỗng
                             "Ngày bàn giao": ngay_giao.strftime('%d/%m/%Y'),
                             "Tổng tiền": tong_tien,
                             "Tạm ứng": tam_ung,
