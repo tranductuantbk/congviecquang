@@ -270,17 +270,16 @@ with tab_TaoDon:
             
             st.markdown("---")
             st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
-            st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách kéo xuống dưới cùng.")
+            st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách bấm biểu tượng dấu cộng (➕) phía dưới bảng.")
             
-            # Bảng nhập liệu đã loại bỏ cột ảnh
-            df_nd_init = pd.DataFrame([{"STT": 1, "Nội dung công việc": "", "Ghi chú": ""}])
+            # Bảng nhập liệu đã loại bỏ cột ảnh và STT (Hệ thống sẽ tự động đánh số khi lưu)
+            df_nd_init = pd.DataFrame([{"Nội dung công việc": "", "Ghi chú": ""}])
             noi_dung_tb = st.data_editor(
                 df_nd_init,
                 num_rows="dynamic",
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "STT": st.column_config.NumberColumn("STT", width="small"),
                     "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc (Kích thước, yêu cầu)", width="large"),
                     "Ghi chú": st.column_config.TextColumn("Ghi chú", width="medium"),
                 }
@@ -302,13 +301,14 @@ with tab_TaoDon:
                     st.error("⚠️ Vui lòng nhập Tên hạng mục và Đơn vị nhận thầu!")
                 else:
                     with st.spinner("⏳ Đang lưu dữ liệu và xuất phiếu..."):
-                        # Trích xuất dữ liệu từ bảng thành chuỗi văn bản gọn gàng (Không có ảnh)
+                        # Trích xuất dữ liệu từ bảng và TỰ ĐỘNG đánh số thứ tự (1, 2, 3...)
                         noi_dung_lines = []
+                        stt_counter = 1
                         for _, row in noi_dung_tb.iterrows():
                             if pd.notna(row['Nội dung công việc']) and str(row['Nội dung công việc']).strip() != "":
-                                stt_val = f"{int(row['STT'])}." if pd.notna(row['STT']) else "-"
                                 gc_val = f" ({row['Ghi chú']})" if pd.notna(row['Ghi chú']) and str(row['Ghi chú']).strip() else ""
-                                noi_dung_lines.append(f"{stt_val} {row['Nội dung công việc']}{gc_val}")
+                                noi_dung_lines.append(f"{stt_counter}. {row['Nội dung công việc']}{gc_val}")
+                                stt_counter += 1
                         
                         noi_dung_final = "\n".join(noi_dung_lines)
 
