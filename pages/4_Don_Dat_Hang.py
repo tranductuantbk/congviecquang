@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import time
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
@@ -16,7 +17,6 @@ if not st.session_state.get("logged_in", False):
 # ==========================================
 st.set_page_config(page_title="Tuấn Quang - Đơn Đặt Hàng & Giao Việc", layout="wide")
 
-# Tự động tạo thư mục lưu trữ ảnh trên máy chủ nếu chưa có
 IMG_DIR = "attached_images"
 if not os.path.exists(IMG_DIR):
     os.makedirs(IMG_DIR)
@@ -32,10 +32,31 @@ def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# ---> HÀM XUẤT PDF CÓ TÍCH HỢP HÌNH ẢNH BẢN VẼ <---
+# ==========================================
+# KHỞI TẠO THƯ VIỆN CHUYỂN PDF SANG ẢNH
+# ==========================================
+try:
+    import fitz  # PyMuPDF
+    HAS_FITZ = True
+except ImportError:
+    HAS_FITZ = False
+
+def convert_pdf_to_png(pdf_bytes):
+    """Hàm phụ trợ chuyển byte PDF thành byte Ảnh PNG độ nét cao"""
+    if not HAS_FITZ:
+        st.error("⚠️ Hệ thống thiếu thư viện 'PyMuPDF' để xuất ảnh. Vui lòng chạy lệnh: pip install PyMuPDF")
+        return None
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = doc.load_page(0) 
+        pix = page.get_pixmap(dpi=200) 
+        return pix.tobytes("png")
+    except Exception as e:
+        st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
+        return None
+
+# ---> HÀM XUẤT PDF <---
 def export_pdf(df, title):
-    # Tách cột hình ảnh ra để không in vào trong bảng chữ
-    image_paths = df["Hình ảnh"].tolist() if "Hình ảnh" in df.columns else []
     df_table = df.drop(columns=["Hình ảnh"], errors="ignore")
     
     pdf = FPDF(orientation='L', unit='mm', format='A4')
@@ -47,9 +68,7 @@ def export_pdf(df, title):
         font_name = 'ArialVN'
     except:
         font_name = 'Arial'
-        st.warning("⚠️ Không tìm thấy file 'arial.ttf'. PDF sẽ bị mất dấu tiếng Việt.")
 
-    # --- Header Phiếu ---
     logo_path = "logo.png" 
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=10, y=8, w=35)
@@ -84,7 +103,6 @@ def export_pdf(df, title):
                         try:
                             val_str = f"{float(item):,.0f}".replace(",", ".")
                         except: pass
-                # Giới hạn bề ngang cột nội dung để ép xuống dòng
                 item_w = min(pdf.get_string_width(val_str) + 4, 65) 
                 if item_w > max_w:
                     max_w = item_w
@@ -143,7 +161,6 @@ def export_pdf(df, title):
                 x_start += col_widths[i]
             pdf.set_y(y_start + row_height)
             
-        # In tổng cộng
         if any(c in df_table.columns for c in num_cols):
             pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
             pdf.set_fill_color(240, 240, 240)
@@ -156,20 +173,7 @@ def export_pdf(df, title):
                 else:
                     pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
             pdf.ln()
-            
-    # --- In Trang Hình Ảnh Đính Kèm (Nếu có) ---
-    for img_path in image_paths:
-        if pd.notnull(img_path) and str(img_path).strip() != "" and os.path.exists(str(img_path)):
-            pdf.add_page() # Tự động tạo trang mới chuyên chứa ảnh
-            pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
-            pdf.cell(0, 10, txt="PHỤ LỤC: HÌNH ẢNH / BẢN VẼ MÔ TẢ KỸ THUẬT", ln=True, align='L')
-            try:
-                # Căn chỉnh ảnh chiếm tỷ lệ lớn vừa phải ở giữa trang
-                pdf.image(str(img_path), x=20, y=30, w=250)
-            except:
-                pdf.cell(0, 10, txt="(Ảnh bị lỗi hoặc định dạng không hỗ trợ để chèn vào PDF)", ln=True, align='L')
 
-    # Xử lý lưu file PDF
     temp_filename = f"temp_donhang_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
     with open(temp_filename, "rb") as f:
@@ -177,7 +181,6 @@ def export_pdf(df, title):
     if os.path.exists(temp_filename):
         os.remove(temp_filename)
     return pdf_bytes
-
 
 # ==========================================
 # QUẢN LÝ DỮ LIỆU ĐÁM MÂY (NEON DB)
@@ -196,7 +199,6 @@ def load_data(table_name, columns):
     df = fetch_data_from_db(table_name)
     if df.empty:
         return pd.DataFrame(columns=columns)
-    # Tự động bổ sung cột nếu Data cũ bị thiếu
     for col in columns:
         if col not in df.columns:
             df[col] = None
@@ -208,7 +210,6 @@ def append_data(new_row_dict, table_name, df_current):
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
         force_reload_cache()
     except Exception:
-        # Nếu cột bị lệch, tự động ghi đè để cấu trúc lại bảng
         try:
             df_combined = pd.concat([df_current, pd.DataFrame([new_row_dict])], ignore_index=True)
             df_combined.to_sql(table_name, con=conn.engine, if_exists='replace', index=False, method='multi')
@@ -228,7 +229,7 @@ def save_data(df, table_name):
         force_reload_cache()
 
 # ==========================================
-# KHỞI TẠO DỮ LIỆU BẢNG (wanchi_donhang)
+# KHỞI TẠO DỮ LIỆU BẢNG
 # ==========================================
 cols_DonHang = ["Ngày", "Hạng mục / Dự án", "Đơn vị nhận thầu", "Nội dung chi tiết", "Hình ảnh", "Ngày bàn giao", "Tổng tiền", "Tạm ứng", "Còn nợ", "Trạng thái", "Ghi chú"]
 df_DonHang = load_data("wanchi_donhang", cols_DonHang)
@@ -236,31 +237,30 @@ df_DonHang = df_DonHang.loc[:, ~df_DonHang.columns.duplicated()]
 
 list_du_an = df_DonHang["Hạng mục / Dự án"].dropna().unique().tolist() if not df_DonHang.empty else []
 
-
 # ==========================================
-# GIAO DIỆN CHÍNH (ĐƯỢC CHIA LÀM 2 TAB)
+# GIAO DIỆN CHÍNH
 # ==========================================
 st.title("📦 Quản Lý Đơn Đặt Hàng & Giao Việc (Ngoại lai)")
 st.markdown("Trang này dùng để quản lý các công việc không có kích thước chuẩn sẵn (Ví dụ: Cắt ván, làm nội thất, sửa chữa xưởng, đặt làm bàn ghế...).")
 st.markdown("---")
 
-tab_TaoDon, tab_LichSu = st.tabs(["📝 TẠO ĐƠN ĐẶT HÀNG MỚI", "🗂️ LỊCH SỬ ĐÃ ĐẶT (QUẢN LÝ & XUẤT PDF)"])
+tab_TaoDon, tab_LichSu = st.tabs(["📝 TẠO ĐƠN ĐẶT HÀNG MỚI", "🗂️ LỊCH SỬ ĐÃ ĐẶT (QUẢN LÝ & XUẤT)"])
 
 # ------------------------------------------
-# TAB 1: FORM TẠO ĐƠN & TẢI ẢNH
+# TAB 1: FORM TẠO ĐƠN
 # ------------------------------------------
 with tab_TaoDon:
     with st.container(border=True):
-        # Biến đếm dùng để làm mới Form tự động
         if "dh_form_key" not in st.session_state:
             st.session_state.dh_form_key = 0
 
         col_title, col_btn = st.columns([3, 1])
         col_title.subheader("Nhập Thông Tin Giao Việc / Đặt Hàng")
         
-        # NÚT XÓA TRẮNG FORM
-        if col_btn.button("✨ Tạo Đơn Mới (Xóa Trắng Form)", use_container_width=True):
+        if col_btn.button("✨ Làm mới Form (Tạo mới)", use_container_width=True):
             st.session_state.dh_form_key += 1
+            if 'new_order_pdf' in st.session_state: del st.session_state['new_order_pdf']
+            if 'new_order_png' in st.session_state: del st.session_state['new_order_png']
             st.rerun()
             
         with st.form(f"form_donhang_{st.session_state.dh_form_key}"):
@@ -270,16 +270,23 @@ with tab_TaoDon:
             nha_thau = c3.text_input("Đơn vị nhận thầu / Nhà cung cấp")
             
             st.markdown("---")
-            col_text, col_img = st.columns([2, 1])
+            st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
+            st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách kéo xuống dưới cùng.")
             
-            with col_text:
-                st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
-                st.caption("Nhấn phím Enter để xuống dòng liệt kê chi tiết yêu cầu, kích thước...")
-                noi_dung = st.text_area("", height=150, placeholder="- Ván ép 10mm: 2 tấm 1m x 2m\n- Bo tròn 4 góc, chà nhám mịn mặt trên.")
-                
-            with col_img:
-                st.markdown("**Đính kèm bản vẽ / Hình ảnh (NẾU CÓ):**")
-                file_anh = st.file_uploader("🖼️ Hỗ trợ định dạng: png, jpg, jpeg", type=["png", "jpg", "jpeg"])
+            # Khởi tạo bảng nhập liệu công việc
+            df_nd_init = pd.DataFrame([{"STT": 1, "Nội dung công việc": "", "Ảnh đính kèm": "", "Ghi chú": ""}])
+            noi_dung_tb = st.data_editor(
+                df_nd_init,
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "STT": st.column_config.NumberColumn("STT", width="small"),
+                    "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc", width="large"),
+                    "Ảnh đính kèm": st.column_config.TextColumn("Ảnh đính kèm (Link/Tên)", width="medium"),
+                    "Ghi chú": st.column_config.TextColumn("Ghi chú", width="medium"),
+                }
+            )
             
             st.markdown("---")
             c4, c5 = st.columns(2)
@@ -292,27 +299,29 @@ with tab_TaoDon:
             tam_ung = c7.number_input("Đã tạm ứng (VNĐ)", min_value=0, step=1)
             ghi_chu = c8.text_input("Ghi chú thanh toán")
             
-            if st.form_submit_button("Lưu Đơn Đặt Hàng Mới"):
+            if st.form_submit_button("Tạo đơn hàng", type="primary"):
                 if not ten_du_an or not nha_thau:
                     st.error("⚠️ Vui lòng nhập Tên hạng mục và Đơn vị nhận thầu!")
                 else:
-                    with st.spinner("⏳ Đang lưu dữ liệu và xử lý hình ảnh..."):
+                    with st.spinner("⏳ Đang lưu dữ liệu và xuất phiếu..."):
+                        # Trích xuất dữ liệu từ bảng thành chuỗi văn bản gọn gàng
+                        noi_dung_lines = []
+                        for _, row in noi_dung_tb.iterrows():
+                            if pd.notna(row['Nội dung công việc']) and str(row['Nội dung công việc']).strip() != "":
+                                stt_val = f"{int(row['STT'])}." if pd.notna(row['STT']) else "-"
+                                anh_val = f" [Ảnh: {row['Ảnh đính kèm']}]" if pd.notna(row['Ảnh đính kèm']) and str(row['Ảnh đính kèm']).strip() else ""
+                                gc_val = f" ({row['Ghi chú']})" if pd.notna(row['Ghi chú']) and str(row['Ghi chú']).strip() else ""
+                                noi_dung_lines.append(f"{stt_val} {row['Nội dung công việc']}{anh_val}{gc_val}")
                         
-                        # Xử lý lưu ảnh nếu có upload
-                        img_path_saved = ""
-                        if file_anh is not None:
-                            img_name = f"IMG_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file_anh.name}"
-                            img_path_saved = os.path.join(IMG_DIR, img_name)
-                            with open(img_path_saved, "wb") as f:
-                                f.write(file_anh.getbuffer())
+                        noi_dung_final = "\n".join(noi_dung_lines)
 
                         con_no = tong_tien - tam_ung
                         new_row = {
                             "Ngày": ngay_dh.strftime('%d/%m/%Y'),
                             "Hạng mục / Dự án": ten_du_an,
                             "Đơn vị nhận thầu": nha_thau,
-                            "Nội dung chi tiết": noi_dung,
-                            "Hình ảnh": img_path_saved,
+                            "Nội dung chi tiết": noi_dung_final,
+                            "Hình ảnh": "", # Bỏ chức năng upload ảnh gốc nên để rỗng
                             "Ngày bàn giao": ngay_giao.strftime('%d/%m/%Y'),
                             "Tổng tiền": tong_tien,
                             "Tạm ứng": tam_ung,
@@ -320,73 +329,93 @@ with tab_TaoDon:
                             "Trạng thái": trang_thai,
                             "Ghi chú": ghi_chu
                         }
+                        
                         append_data(new_row, "wanchi_donhang", df_DonHang)
-                    
-                    # Tự động làm sạch form sau khi lưu thành công
+                        
+                        # Sinh PDF và PNG tự động sau khi lưu
+                        df_new_order = pd.DataFrame([new_row])
+                        pdf_bytes = export_pdf(df_new_order, f"ĐƠN ĐẶT HÀNG - {ten_du_an.upper()}")
+                        
+                        st.session_state['new_order_pdf'] = pdf_bytes
+                        st.session_state['new_order_png'] = convert_pdf_to_png(pdf_bytes)
+                        st.session_state['new_order_filename'] = f"DonHang_{ten_du_an.replace(' ', '')}"
+                        
                     st.session_state.dh_form_key += 1
-                    st.success("✅ Đã tạo đơn thành công! (Form đã được làm sạch để nhập đơn mới).")
                     st.rerun()
 
+        # Hiển thị khu vực Tải xuống trực tiếp khi vừa Tạo đơn xong
+        if 'new_order_pdf' in st.session_state:
+            st.success("🎉 TẠO ĐƠN THÀNH CÔNG! Phiếu giao việc đã sẵn sàng để tải xuống.")
+            col_d1, col_d2 = st.columns(2)
+            
+            if st.session_state.get('new_order_png'):
+                col_d1.download_button(
+                    label="🖼️ Tải File Ảnh Đơn Hàng (Khuyên dùng)", 
+                    data=st.session_state['new_order_png'], 
+                    file_name=f"{st.session_state['new_order_filename']}.png", 
+                    mime="image/png", 
+                    type="primary", 
+                    use_container_width=True
+                )
+                
+            col_d2.download_button(
+                label="🖨️ Tải File PDF", 
+                data=st.session_state['new_order_pdf'], 
+                file_name=f"{st.session_state['new_order_filename']}.pdf", 
+                mime="application/pdf", 
+                use_container_width=True
+            )
+
 # ------------------------------------------
-# TAB 2: LỊCH SỬ, TRÌNH CHIẾU ẢNH & PDF
+# TAB 2: LỊCH SỬ & XUẤT BÁO CÁO
 # ------------------------------------------
 with tab_LichSu:
-    st.subheader("Bảng Dữ Liệu Đơn Hàng (Cho phép sửa trực tiếp)")
+    st.subheader("Bảng Dữ Liệu Đơn Hàng (Tự động cập nhật)")
     
-    # Ẩn cột đường dẫn hình ảnh cho bảng đỡ rối, giữ lại các cột thông tin
-    display_df = df_DonHang.copy()
+    # Ẩn cột đường dẫn hình ảnh cho sạch sẽ
+    display_df = df_DonHang.drop(columns=["Hình ảnh"], errors="ignore")
     
     edited_DonHang = st.data_editor(
         display_df, 
         num_rows="dynamic", 
         use_container_width=True, 
         key="edit_DH",
-        column_config={
-            "Hình ảnh": st.column_config.TextColumn("🖼️ File Đính Kèm", disabled=True)
-        }
+        hide_index=True
     )
 
-    if st.button("💾 Cập nhật dữ liệu Bảng"):
-        with st.spinner("⏳ Đang đồng bộ cập nhật..."):
+    # Hệ thống tự động nhận diện và cập nhật khi dữ liệu trên bảng thay đổi
+    if not edited_DonHang.equals(display_df):
+        with st.spinner("⏳ Đang đồng bộ cập nhật dữ liệu..."):
             save_data(edited_DonHang, "wanchi_donhang")
-        st.success("✅ Đã cập nhật thành công!")
+        st.success("✅ Hệ thống đã tự động lưu thay đổi!")
+        time.sleep(1)
         st.rerun()
         
     st.markdown("---")
     
-    # KÊNH TRÌNH CHIẾU ẢNH
-    st.subheader("🖼️ Trình Chiếu Hình Ảnh Bản Vẽ")
-    df_co_anh = df_DonHang[df_DonHang["Hình ảnh"].notnull() & (df_DonHang["Hình ảnh"] != "")]
+    # XUẤT FILE CHUYÊN NGHIỆP TỪ LỊCH SỬ
+    st.subheader("📥 Xuất Lại Phiếu Giao Việc / Đặt Hàng")
+    loai_xuat = st.radio("Định dạng xuất:", ["Chỉ xuất file Ảnh (PNG)", "Chỉ xuất file PDF"], horizontal=True, index=0)
     
-    if not df_co_anh.empty:
-        chon_don_xem_anh = st.selectbox("Chọn dự án để xem ảnh / bản vẽ đính kèm:", df_co_anh["Hạng mục / Dự án"].unique())
-        anh_can_xem = df_co_anh[df_co_anh["Hạng mục / Dự án"] == chon_don_xem_anh]["Hình ảnh"].iloc[0]
-        
-        if os.path.exists(anh_can_xem):
-            # Căn giữa và thu nhỏ ảnh hiển thị cho đẹp
-            col_z1, col_z2, col_z3 = st.columns([1, 2, 1])
-            col_z2.image(anh_can_xem, caption=f"Mô tả của: {chon_don_xem_anh}", use_container_width=True)
-        else:
-            st.warning("⚠️ Không tìm thấy file ảnh gốc trên hệ thống (có thể đã bị xóa).")
-    else:
-        st.info("💡 Chưa có đơn hàng nào trong hệ thống được đính kèm hình ảnh.")
+    col_pdf1, col_pdf2, col_pdf3 = st.columns([1, 1, 1])
+    filter_pdf = col_pdf1.selectbox("Chọn dự án để in:", ["Tất cả"] + list_du_an)
 
-    st.markdown("---")
-    
-    # XUẤT PDF CHUYÊN NGHIỆP
-    st.subheader("📥 Xuất Phiếu Giao Việc / Đặt Hàng (Kèm Bản Vẽ)")
-    col_pdf1, col_pdf2 = st.columns([1, 2])
-
-    filter_pdf = col_pdf1.selectbox("Chọn dự án để in PDF:", ["Tất cả"] + list_du_an)
-
-    if st.button("Tạo file PDF"):
-        with st.spinner("Đang trích xuất file PDF (Đang ghép ảnh vào nếu có)..."):
+    if col_pdf2.button("Tạo file", use_container_width=True):
+        with st.spinner("Đang trích xuất file..."):
             df_export = edited_DonHang if filter_pdf == "Tất cả" else edited_DonHang[edited_DonHang["Hạng mục / Dự án"] == filter_pdf]
             title_pdf = f"ĐƠN ĐẶT HÀNG / GIAO VIỆC"
             if filter_pdf != "Tất cả":
                 title_pdf += f" - {filter_pdf.upper()}"
                 
-            pdf_file = export_pdf(df_export, title_pdf)
-        
-        file_name = f"TuanQuang_DatHang_{filter_pdf}.pdf"
-        col_pdf2.download_button("⬇️ Nhấn để Tải PDF Xuống", pdf_file, file_name, "application/pdf")
+            pdf_bytes = export_pdf(df_export, title_pdf)
+            file_name = f"TuanQuang_DatHang_{filter_pdf.replace(' ', '')}"
+            
+            st.session_state['hist_pdf'] = pdf_bytes
+            st.session_state['hist_png'] = convert_pdf_to_png(pdf_bytes)
+            st.session_state['hist_name'] = file_name
+    
+    if 'hist_pdf' in st.session_state:
+        if "Ảnh" in loai_xuat and st.session_state.get('hist_png'):
+            col_pdf3.download_button("🖼️ TẢI XUỐNG ẢNH", st.session_state['hist_png'], f"{st.session_state['hist_name']}.png", "image/png", type="primary", use_container_width=True)
+        elif "PDF" in loai_xuat:
+            col_pdf3.download_button("🖨️ TẢI XUỐNG PDF", st.session_state['hist_pdf'], f"{st.session_state['hist_name']}.pdf", "application/pdf", type="primary", use_container_width=True)
