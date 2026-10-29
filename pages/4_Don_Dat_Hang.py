@@ -51,10 +51,10 @@ def convert_pdf_to_png(pdf_bytes):
         st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
         return None
 
-# ---> HÀM XUẤT PDF <---
-def export_pdf(df, title):
-    # Loại bỏ những cột không cần thiết để bảng gọn hơn
-    drop_cols = ["Hình ảnh", "Ghi chú"]
+# ---> HÀM XUẤT PDF ĐÃ CHỈNH SỬA <---
+def export_pdf(df, title, du_an=""):
+    # Loại bỏ những cột không cần thiết để bảng gọn hơn, đã bỏ thêm "Hạng mục / Dự án"
+    drop_cols = ["Hình ảnh", "Ghi chú", "Hạng mục / Dự án"]
     df_table = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
     
     pdf = FPDF(orientation='L', unit='mm', format='A4')
@@ -82,11 +82,18 @@ def export_pdf(df, title):
     pdf.cell(0, 5, txt="Liên hệ: 0937572577", ln=True, align='L')
     pdf.ln(10)
 
+    # In Tiêu đề
     pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 16)
     pdf.cell(0, 10, txt=title.upper(), ln=True, align='C')
     pdf.set_font(font_name, '', 10)
     pdf.cell(0, 8, txt=f"Ngày xuất: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align='C')
     pdf.ln(5)
+    
+    # In Tên Dự Án (canh trái, đứng riêng)
+    if du_an:
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 12)
+        pdf.cell(0, 8, txt=f"Hạng mục / Dự án: {du_an}", ln=True, align='L')
+        pdf.ln(2)
 
     # --- In Bảng Nội Dung ---
     if not df_table.empty:
@@ -272,7 +279,6 @@ with tab_TaoDon:
             st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
             st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách bấm biểu tượng dấu cộng (➕) phía dưới bảng.")
             
-            # Bảng nhập liệu đã loại bỏ cột ảnh và STT (Hệ thống sẽ tự động đánh số khi lưu)
             df_nd_init = pd.DataFrame([{"Nội dung công việc": "", "Ghi chú": ""}])
             noi_dung_tb = st.data_editor(
                 df_nd_init,
@@ -301,7 +307,6 @@ with tab_TaoDon:
                     st.error("⚠️ Vui lòng nhập Tên hạng mục và Đơn vị nhận thầu!")
                 else:
                     with st.spinner("⏳ Đang lưu dữ liệu và xuất phiếu..."):
-                        # Trích xuất dữ liệu từ bảng và TỰ ĐỘNG đánh số thứ tự (1, 2, 3...)
                         noi_dung_lines = []
                         stt_counter = 1
                         for _, row in noi_dung_tb.iterrows():
@@ -318,7 +323,7 @@ with tab_TaoDon:
                             "Hạng mục / Dự án": ten_du_an,
                             "Đơn vị nhận thầu": nha_thau,
                             "Nội dung chi tiết": noi_dung_final,
-                            "Hình ảnh": "", # Để rỗng
+                            "Hình ảnh": "",
                             "Ngày bàn giao": ngay_giao.strftime('%d/%m/%Y'),
                             "Tổng tiền": tong_tien,
                             "Tạm ứng": tam_ung,
@@ -331,7 +336,7 @@ with tab_TaoDon:
                         
                         # Sinh PDF và PNG tự động sau khi lưu
                         df_new_order = pd.DataFrame([new_row])
-                        pdf_bytes = export_pdf(df_new_order, f"ĐƠN ĐẶT HÀNG - {ten_du_an.upper()}")
+                        pdf_bytes = export_pdf(df_new_order, "ĐƠN ĐẶT HÀNG", ten_du_an)
                         
                         st.session_state['new_order_pdf'] = pdf_bytes
                         st.session_state['new_order_png'] = convert_pdf_to_png(pdf_bytes)
@@ -369,7 +374,6 @@ with tab_TaoDon:
 with tab_LichSu:
     st.subheader("Bảng Dữ Liệu Đơn Hàng (Tự động cập nhật)")
     
-    # Ẩn cột đường dẫn hình ảnh cho sạch sẽ
     display_df = df_DonHang.drop(columns=["Hình ảnh"], errors="ignore")
     
     edited_DonHang = st.data_editor(
@@ -380,7 +384,6 @@ with tab_LichSu:
         hide_index=True
     )
 
-    # Hệ thống tự động nhận diện và cập nhật khi dữ liệu trên bảng thay đổi
     if not edited_DonHang.equals(display_df):
         with st.spinner("⏳ Đang đồng bộ cập nhật dữ liệu..."):
             save_data(edited_DonHang, "wanchi_donhang")
@@ -390,7 +393,6 @@ with tab_LichSu:
         
     st.markdown("---")
     
-    # XUẤT FILE CHUYÊN NGHIỆP TỪ LỊCH SỬ
     st.subheader("📥 Xuất Lại Phiếu Giao Việc / Đặt Hàng")
     loai_xuat = st.radio("Định dạng xuất:", ["Chỉ xuất file Ảnh (PNG)", "Chỉ xuất file PDF"], horizontal=True, index=0)
     
@@ -400,11 +402,9 @@ with tab_LichSu:
     if col_pdf2.button("Tạo file", use_container_width=True):
         with st.spinner("Đang trích xuất file..."):
             df_export = edited_DonHang if filter_pdf == "Tất cả" else edited_DonHang[edited_DonHang["Hạng mục / Dự án"] == filter_pdf]
-            title_pdf = f"ĐƠN ĐẶT HÀNG / GIAO VIỆC"
-            if filter_pdf != "Tất cả":
-                title_pdf += f" - {filter_pdf.upper()}"
-                
-            pdf_bytes = export_pdf(df_export, title_pdf)
+            
+            du_an_val = filter_pdf if filter_pdf != "Tất cả" else ""
+            pdf_bytes = export_pdf(df_export, "ĐƠN ĐẶT HÀNG", du_an_val)
             file_name = f"TuanQuang_DatHang_{filter_pdf.replace(' ', '')}"
             
             st.session_state['hist_pdf'] = pdf_bytes
