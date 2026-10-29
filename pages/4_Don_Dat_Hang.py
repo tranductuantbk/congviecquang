@@ -51,9 +51,14 @@ def convert_pdf_to_png(pdf_bytes):
         st.error(f"Lỗi khi chuyển đổi ảnh: {e}")
         return None
 
-# ---> HÀM XUẤT PDF ĐÃ CHỈNH SỬA <---
+# ---> HÀM XUẤT PDF ĐÃ CHỈNH SỬA (BẢNG GHI CHÚ RIÊNG) <---
 def export_pdf(df, title, du_an=""):
-    # Loại bỏ những cột không cần thiết để bảng gọn hơn, đã bỏ thêm "Hạng mục / Dự án"
+    # Lấy nội dung ghi chú ra trước khi drop cột
+    notes = [str(x) for x in df["Ghi chú"].tolist() if pd.notnull(x) and str(x).strip() != ""]
+    unique_notes = list(dict.fromkeys(notes)) # Loại bỏ trùng lặp nếu in nhiều dòng
+    ghi_chu_text = "\n".join(unique_notes)
+    
+    # Loại bỏ những cột không cần thiết để bảng chính gọn hơn
     drop_cols = ["Hình ảnh", "Ghi chú", "Hạng mục / Dự án"]
     df_table = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
     
@@ -95,7 +100,7 @@ def export_pdf(df, title, du_an=""):
         pdf.cell(0, 8, txt=f"Hạng mục / Dự án: {du_an}", ln=True, align='L')
         pdf.ln(2)
 
-    # --- In Bảng Nội Dung ---
+    # --- In Bảng Nội Dung Chính ---
     if not df_table.empty:
         num_cols = ["Tổng tiền", "Tạm ứng", "Còn nợ"]
         col_widths = []
@@ -179,6 +184,18 @@ def export_pdf(df, title, du_an=""):
                 else:
                     pdf.cell(col_widths[i], 8, txt="", border=1, fill=True) 
             pdf.ln()
+
+    # --- In Bảng Ghi Chú Riêng Ở Dưới (Nếu Có) ---
+    if ghi_chu_text:
+        pdf.ln(5)
+        if pdf.get_y() + 20 > 190: 
+            pdf.add_page()
+            
+        pdf.set_font(font_name, 'B' if font_name == 'ArialVN' else '', 9)
+        pdf.set_fill_color(230, 230, 230)
+        pdf.cell(0, 8, txt="GHI CHÚ / YÊU CẦU THÊM:", border=1, fill=True, align='L', ln=True)
+        pdf.set_font(font_name, '', 9)
+        pdf.multi_cell(0, 6, txt=ghi_chu_text, border=1, align='L')
 
     temp_filename = f"temp_donhang_{datetime.now().strftime('%H%M%S')}.pdf"
     pdf.output(temp_filename)
@@ -279,15 +296,15 @@ with tab_TaoDon:
             st.markdown("**Nội dung công việc & Kích thước chi tiết:**")
             st.caption("Nhập trực tiếp vào bảng dưới đây. Có thể thêm dòng bằng cách bấm biểu tượng dấu cộng (➕) phía dưới bảng.")
             
-            df_nd_init = pd.DataFrame([{"Nội dung công việc": "", "Ghi chú": ""}])
+            # Đã bỏ cột Ghi chú khỏi bảng
+            df_nd_init = pd.DataFrame([{"Nội dung công việc": ""}])
             noi_dung_tb = st.data_editor(
                 df_nd_init,
                 num_rows="dynamic",
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc (Kích thước, yêu cầu)", width="large"),
-                    "Ghi chú": st.column_config.TextColumn("Ghi chú", width="medium"),
+                    "Nội dung công việc": st.column_config.TextColumn("Nội dung công việc (Kích thước, yêu cầu)", width="large")
                 }
             )
             
@@ -297,10 +314,12 @@ with tab_TaoDon:
             trang_thai = c5.selectbox("Trạng thái công việc", ["Mới đặt", "Đang xử lý", "Đã hoàn thành", "Đã hủy"])
             
             st.markdown("---")
-            c6, c7, c8 = st.columns(3)
+            c6, c7 = st.columns(2)
             tong_tien = c6.number_input("Tổng giá trị (VNĐ)", min_value=0, step=1)
             tam_ung = c7.number_input("Đã tạm ứng (VNĐ)", min_value=0, step=1)
-            ghi_chu = c8.text_input("Ghi chú thanh toán")
+            
+            # Khung ghi chú riêng nằm ngoài bảng
+            ghi_chu = st.text_area("📝 Ghi chú đơn hàng (Sẽ in thành bảng riêng ở cuối phiếu):", placeholder="Nhập yêu cầu thêm, ghi chú thanh toán...")
             
             if st.form_submit_button("Tạo đơn hàng", type="primary"):
                 if not ten_du_an or not nha_thau:
@@ -311,8 +330,7 @@ with tab_TaoDon:
                         stt_counter = 1
                         for _, row in noi_dung_tb.iterrows():
                             if pd.notna(row['Nội dung công việc']) and str(row['Nội dung công việc']).strip() != "":
-                                gc_val = f" ({row['Ghi chú']})" if pd.notna(row['Ghi chú']) and str(row['Ghi chú']).strip() else ""
-                                noi_dung_lines.append(f"{stt_counter}. {row['Nội dung công việc']}{gc_val}")
+                                noi_dung_lines.append(f"{stt_counter}. {row['Nội dung công việc']}")
                                 stt_counter += 1
                         
                         noi_dung_final = "\n".join(noi_dung_lines)
