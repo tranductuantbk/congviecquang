@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import inspect, text
-import time
+from sqlalchemy import inspect
 import io
 from fpdf import FPDF
 import math
@@ -24,75 +23,35 @@ except Exception as e:
     st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
-# ==========================================
-# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
-# ==========================================
-def verify_database_connection(conn_obj, max_retries=3, delay=2):
-    for attempt in range(max_retries):
-        try:
-            with conn_obj.session as session:
-                session.execute(text("SELECT 1"))
-            return True
-        except Exception:
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-            else:
-                return False
-
-if "db_load_success" not in st.session_state:
-    st.session_state["db_load_success"] = False
-
-is_connected = verify_database_connection(conn)
-st.session_state["db_load_success"] = is_connected
-
-if not is_connected:
-    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
-    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
-    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
-    st.stop()
-
-# ==========================================
-# HÀM XỬ LÝ DỮ LIỆU (CÓ KHÓA BẢO VỆ)
-# ==========================================
 def load_data():
     try:
         inspector = inspect(conn.engine)
         if not inspector.has_table("wanchi_sanpham"):
-            st.session_state["db_load_success"] = True
             return []
         df = pd.read_sql("SELECT * FROM wanchi_sanpham", con=conn.engine)
-        st.session_state["db_load_success"] = True # Đánh dấu đã tải thành công
         if not df.empty:
             if "Giá Tiêu Chuẩn" in df.columns:
                 df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
             return df.to_dict('records')
         return []
     except Exception as e:
-        st.session_state["db_load_success"] = False # Bật chốt khóa nếu lỗi
-        st.error("⏳ Máy chủ dữ liệu Neon đang mất kết nối. Chưa thể tải dữ liệu.")
+        st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
         return None
 
 def save_data(data_list):
-    # 🛡️ CHẶN LƯU ĐÈ NẾU CHƯA LOAD THÀNH CÔNG
-    if not st.session_state.get("db_load_success", False):
-        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu! Dữ liệu gốc từ máy chủ chưa được tải xuống hoàn tất. Nếu lưu bây giờ sẽ xóa mất dữ liệu cũ. Vui lòng bấm F5 (Tải lại trang).")
-        st.stop()
-        return
-        
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
             df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Chi phí đóng gói", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
     except Exception as e:
-        st.error(f"⚠️ Lỗi khi lưu dữ liệu: {e}")
+        pass
 
 # ==========================================
 # QUẢN LÝ TRẠNG THÁI (SESSION STATE)
 # ==========================================
 if "danh_sach_sp" not in st.session_state or st.session_state["danh_sach_sp"] is None:
-    loaded = load_data()
-    st.session_state["danh_sach_sp"] = loaded if loaded is not None else []
+    st.session_state["danh_sach_sp"] = load_data()
 
 if st.session_state["danh_sach_sp"] is None:
     st.session_state["danh_sach_sp"] = []
@@ -332,7 +291,6 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
 
                 ten_sp_check = str(sp.get("Tên Sản Phẩm", ""))
                 
-                # BỘ NHẬN DIỆN THÔNG MINH: NẾU LÀ BỘ -> NHẢY SANG TAB 3
                 if ten_sp_check.startswith("[BỘ]"):
                     st.session_state["original_ma_bo"] = sp.get("Mã SP", "")
                     st.session_state["original_ten_bo"] = ten_sp_check
@@ -352,7 +310,6 @@ elif st.session_state["current_tab_sx"] == "📋 2. DANH SÁCH SẢN PHẨM":
                     st.session_state["current_tab_sx"] = danh_sach_tabs[2]
                     st.rerun()
                     
-                # NẾU LÀ SẢN PHẨM LẺ -> NHẢY SANG TAB 1
                 else:
                     st.session_state["original_ma_sp"] = sp.get("Mã SP", "")
                     st.session_state["original_ten_sp"] = ten_sp_check
@@ -505,7 +462,7 @@ elif st.session_state["current_tab_sx"] == "🧩 3. GHÉP BỘ":
                 san_pham_moi_bo = {
                     "Mã SP": ma_bo,
                     "Tên Sản Phẩm": f"[BỘ] {ten_bo}",
-                    "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g", # Đã chuyển lại thành chuỗi định dạng chi tiết
+                    "Trọng lượng": f"Thân: {tl_than}g | Nắp: {tl_nap}g", 
                     "Bao bì": bb_bo,
                     "Phụ kiện": pk_bo,
                     "Chi phí đóng gói": cp_dong_goi_bo,
@@ -554,16 +511,28 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
             ten_sp = sp.get("Tên Sản Phẩm", "")
             trong_luong = sp.get("Trọng lượng", 0)
             
+            gia_may = sp.get("Giá máy", 0)
+            chu_ky = sp.get("Chu kỳ", 0)
+            sp_khuon = sp.get("SP Khuôn", 0)
+            
             if pd.isna(trong_luong):
                 tl_hien_thi = "0 g"
             elif isinstance(trong_luong, (int, float)):
                 tl_hien_thi = f"{trong_luong} g"
             else:
-                tl_hien_thi = str(trong_luong) # Hệ thống sẽ đọc và hiển thị mượt mà chuỗi "Thân: ...g | Nắp: ...g"
+                tl_hien_thi = str(trong_luong) 
+            
+            try:
+                gia_may_str = f"{float(gia_may):,.0f}"
+            except:
+                gia_may_str = str(gia_may)
                 
             du_lieu_hien_thi.append({
                 "Mã SP": ma_sp,
                 "Tên Sản Phẩm": ten_sp,
+                "Giá máy": gia_may_str,
+                "Chu kỳ": str(chu_ky),
+                "SP/Khuôn": str(sp_khuon),
                 "Định Lượng (Trọng lượng)": tl_hien_thi
             })
             
@@ -605,19 +574,29 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
                 except:
                     pdf.set_font("Arial", size=10)
                     
-                pdf.cell(30, 10, "Mã SP", border=1, align='C')
-                pdf.cell(90, 10, "Tên Sản Phẩm", border=1, align='C')
-                pdf.cell(70, 10, "Trọng Lượng", border=1, align='C')
+                # Tiêu đề cột mới, tinh chỉnh kích thước sao cho tổng bằng 190
+                pdf.cell(20, 10, "Mã SP", border=1, align='C')
+                pdf.cell(50, 10, "Tên Sản Phẩm", border=1, align='C')
+                pdf.cell(30, 10, "Giá máy", border=1, align='C')
+                pdf.cell(20, 10, "Chu kỳ", border=1, align='C')
+                pdf.cell(25, 10, "SP/Khuôn", border=1, align='C')
+                pdf.cell(45, 10, "Trọng Lượng", border=1, align='C')
                 pdf.ln()
                 
                 for i, row in dataframe.iterrows():
                     ma = str(row['Mã SP'])
                     ten = str(row['Tên Sản Phẩm'])
+                    gm = str(row['Giá máy'])
+                    ck = str(row['Chu kỳ'])
+                    spk = str(row['SP/Khuôn'])
                     tl = str(row['Định Lượng (Trọng lượng)'])
                     
-                    pdf.cell(30, 10, ma, border=1, align='C')
-                    pdf.cell(90, 10, ten, border=1, align='L')
-                    pdf.cell(70, 10, tl, border=1, align='C')
+                    pdf.cell(20, 10, ma, border=1, align='C')
+                    pdf.cell(50, 10, ten, border=1, align='L')
+                    pdf.cell(30, 10, gm, border=1, align='C')
+                    pdf.cell(20, 10, ck, border=1, align='C')
+                    pdf.cell(25, 10, spk, border=1, align='C')
+                    pdf.cell(45, 10, tl, border=1, align='C')
                     pdf.ln()
                 
                 return bytes(pdf.output())
