@@ -4,28 +4,11 @@ import time
 from fpdf import FPDF
 import unicodedata
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 import os
 import io
 
-# Import lá chắn bảo vệ
-from security_guard import setup_global_shield
-
-# ==========================================
-# CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
-# ==========================================
-
-try:
-    conn = st.connection("postgresql", type="sql")
-except Exception as e:
-    st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
-    st.stop()
-
-# KÍCH HOẠT LÁ CHẮN NGAY TẠI ĐÂY
-setup_global_shield(conn)
-
-# ... (Toàn bộ phần code cũ của bạn từ dòng "def remove_accents(input_str):" trở xuống giữ nguyên) ...
-
+# --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Tính Giá Gia Công", layout="wide")
 
 # --- KHÓA BẢO MẬT TỪ TRANG CHỦ ---
@@ -39,15 +22,47 @@ if not st.session_state.get("logged_in", False):
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
-    st.error("Chưa thể kết nối Database Neon.")
+    st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại cấu hình.")
     st.stop()
 
+# ==========================================
+# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
+# ==========================================
+def verify_database_connection(conn_obj, max_retries=3, delay=2):
+    for attempt in range(max_retries):
+        try:
+            with conn_obj.session as session:
+                session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return False
+
+if "db_load_success" not in st.session_state:
+    st.session_state["db_load_success"] = False
+
+is_connected = verify_database_connection(conn)
+st.session_state["db_load_success"] = is_connected
+
+if not is_connected:
+    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
+    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
+    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
+    st.stop()
+
+# ==========================================
+# HÀM XỬ LÝ DỮ LIỆU (CÓ KHÓA BẢO VỆ)
+# ==========================================
 def load_data_gc():
     try:
         inspector = inspect(conn.engine)
         if not inspector.has_table("wanchi_giacong"):
+            st.session_state["db_load_success"] = True
             return []
         df = pd.read_sql("SELECT * FROM wanchi_giacong", con=conn.engine)
+        st.session_state["db_load_success"] = True # Đánh dấu đã tải thành công
         if not df.empty:
             # Đồng bộ dữ liệu cũ theo cấu trúc mới
             if "Hệ số ĐL" in df.columns:
@@ -61,10 +76,17 @@ def load_data_gc():
             return df.to_dict('records')
         return []
     except Exception as e:
-        st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
+        st.session_state["db_load_success"] = False # Bật chốt khóa nếu lỗi
+        st.warning("⏳ Máy chủ dữ liệu đang mất kết nối. Chưa thể tải dữ liệu.")
         return None
 
 def save_data_gc(data_list):
+    # 🛡️ CHẶN LƯU ĐÈ NẾU CHƯA LOAD THÀNH CÔNG
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu! Dữ liệu gốc từ máy chủ chưa được tải xuống hoàn tất. Nếu lưu bây giờ sẽ xóa mất dữ liệu cũ. Vui lòng bấm F5 (Tải lại trang).")
+        st.stop()
+        return
+
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
@@ -76,7 +98,8 @@ def save_data_gc(data_list):
 # KHỞI TẠO BỘ NHỚ LƯU TRỮ 
 # ==========================================
 if "danh_sach_gc" not in st.session_state or st.session_state["danh_sach_gc"] is None:
-    st.session_state["danh_sach_gc"] = load_data_gc()
+    loaded = load_data_gc()
+    st.session_state["danh_sach_gc"] = loaded if loaded is not None else []
 
 if st.session_state["danh_sach_gc"] is None:
     st.session_state["danh_sach_gc"] = []
