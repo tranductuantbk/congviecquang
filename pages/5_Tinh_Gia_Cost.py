@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import time
 from sqlalchemy import text
 from fpdf import FPDF
 import unicodedata
@@ -23,26 +24,58 @@ except Exception as e:
     st.error("Chưa thể kết nối đến cơ sở dữ liệu.")
     st.stop()
 
+# ==========================================
+# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
+# ==========================================
+def verify_database_connection(conn_obj, max_retries=3, delay=2):
+    for attempt in range(max_retries):
+        try:
+            with conn_obj.session as session:
+                session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return False
+
+if "db_load_success" not in st.session_state:
+    st.session_state["db_load_success"] = False
+
+is_connected = verify_database_connection(conn)
+st.session_state["db_load_success"] = is_connected
+
+if not is_connected:
+    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
+    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
+    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
+    st.stop()
+
 def remove_accents(input_str):
     s = str(input_str).replace('Đ', 'D').replace('đ', 'd')
     nfkd_form = unicodedata.normalize('NFKD', s)
     return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 # ==========================================
-# QUẢN LÝ DỮ LIỆU ĐÁM MÂY
+# QUẢN LÝ DỮ LIỆU ĐÁM MÂY CÓ LÁ CHẮN
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
     try:
         return conn.query(f"SELECT * FROM {table_name}", ttl=0)
     except Exception:
-        return pd.DataFrame()
+        # Trả None để Lính gác bắt được lỗi
+        return None
 
 def force_reload_cache():
     fetch_data_from_db.clear()
 
 def load_data(table_name, columns):
     df = fetch_data_from_db(table_name)
+    if df is None:
+        st.session_state["db_load_success"] = False
+        st.error(f"⏳ Máy chủ Neon chưa sẵn sàng. Mất kết nối khi tải dữ liệu bảng '{table_name}'.")
+        return pd.DataFrame(columns=columns)
     if df.empty:
         return pd.DataFrame(columns=columns)
     for col in columns:
@@ -51,6 +84,11 @@ def load_data(table_name, columns):
     return df
 
 def append_data(new_row_dict, table_name, df_current):
+    # 🛡️ CHỐT KHÓA BẢO VỆ
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể thêm dữ liệu! Database đang mất kết nối. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         df_new = pd.DataFrame([new_row_dict])
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
@@ -64,6 +102,11 @@ def append_data(new_row_dict, table_name, df_current):
             st.error(f"⚠️ Lỗi: {str(e2)}")
 
 def save_data(df, table_name):
+    # 🛡️ CHỐT KHÓA BẢO VỆ
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu đè! Dữ liệu gốc từ đám mây chưa tải xong. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         with conn.session as session:
             session.execute(text(f"TRUNCATE TABLE {table_name}"))
@@ -106,7 +149,7 @@ DEFAULT_TEMPLATES = {
 
 df_templates = load_data("wanchi_templates", ["Tên ngành nghề", "Danh sách chi phí"])
 
-if df_templates.empty:
+if df_templates.empty and st.session_state.get("db_load_success", False):
     rows = [{"Tên ngành nghề": k, "Danh sách chi phí": json.dumps(v, ensure_ascii=False)} for k, v in DEFAULT_TEMPLATES.items()]
     df_templates = pd.DataFrame(rows)
     save_data(df_templates, "wanchi_templates")
@@ -282,7 +325,6 @@ with tab_TinhCost:
     st.subheader("Bước 2: Điền Bảng Định Mức Trực Tiếp (BOM)")
     st.info("Danh sách xổ xuống ở cột 'Nhóm Phân Loại' đã được tự động cập nhật khớp hoàn toàn với ngành bạn vừa chọn ở trên.")
 
-    # KHÓA CHẶT (BIND) DANH SÁCH DROPDOWN THEO ĐÚNG NGÀNH ĐANG CHỌN TẠI SELECTBOX
     current_categories = dynamic_templates.get(nganh_chon, ["Khác"])
     if not current_categories:
         current_categories = ["Khác"]
@@ -313,7 +355,6 @@ with tab_TinhCost:
         edited_cost_df["Thành tiền"] = edited_cost_df["Định mức"] * edited_cost_df["Đơn giá"]
         tong_cost = edited_cost_df["Thành tiền"].sum()
         
-        # LƯU KẾT QUẢ VÀO STATE ĐỂ TỰ ĐỘNG HIỂN THỊ SỐ TIỀN BỎ CHỮ "NONE"
         st.session_state.cost_items = edited_cost_df.copy()
 
     st.markdown("---")
