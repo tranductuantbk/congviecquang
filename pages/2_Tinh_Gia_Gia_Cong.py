@@ -62,9 +62,8 @@ def load_data_gc():
             st.session_state["db_load_success"] = True
             return []
         df = pd.read_sql("SELECT * FROM wanchi_giacong", con=conn.engine)
-        st.session_state["db_load_success"] = True # Đánh dấu đã tải thành công
+        st.session_state["db_load_success"] = True 
         if not df.empty:
-            # Đồng bộ dữ liệu cũ theo cấu trúc mới
             if "Hệ số ĐL" in df.columns:
                 df.rename(columns={"Hệ số ĐL": "Hệ số Báo giá"}, inplace=True)
             if "Giá Đại Lý" in df.columns:
@@ -76,12 +75,11 @@ def load_data_gc():
             return df.to_dict('records')
         return []
     except Exception as e:
-        st.session_state["db_load_success"] = False # Bật chốt khóa nếu lỗi
+        st.session_state["db_load_success"] = False 
         st.warning("⏳ Máy chủ dữ liệu đang mất kết nối. Chưa thể tải dữ liệu.")
         return None
 
 def save_data_gc(data_list):
-    # 🛡️ CHẶN LƯU ĐÈ NẾU CHƯA LOAD THÀNH CÔNG
     if not st.session_state.get("db_load_success", False):
         st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu! Dữ liệu gốc từ máy chủ chưa được tải xuống hoàn tất. Nếu lưu bây giờ sẽ xóa mất dữ liệu cũ. Vui lòng bấm F5 (Tải lại trang).")
         st.stop()
@@ -366,7 +364,10 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
             ten_sp = sp.get("Tên Sản Phẩm", "")
             trong_luong = sp.get("Trọng lượng", 0)
             
-            # --- XỬ LÝ LỖI HIỂN THỊ DỮ LIỆU ĐỊNH LƯỢNG ---
+            gia_may = sp.get("Giá máy", 0)
+            chu_ky = sp.get("Chu kỳ", 0)
+            sp_khuon = sp.get("SP Khuôn", 0)
+            
             if pd.isna(trong_luong):
                 tl_hien_thi = "0 g"
             elif isinstance(trong_luong, (int, float)):
@@ -374,9 +375,17 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
             else:
                 tl_hien_thi = str(trong_luong)
                 
+            try:
+                gia_may_str = f"{float(gia_may):,.0f}"
+            except:
+                gia_may_str = str(gia_may)
+                
             du_lieu_hien_thi.append({
                 "Mã SP": ma_sp,
                 "Tên Sản Phẩm": ten_sp,
+                "Giá máy": gia_may_str,
+                "Chu kỳ": str(chu_ky),
+                "SP/Khuôn": str(sp_khuon),
                 "Định Lượng (Trọng lượng)": tl_hien_thi
             })
             
@@ -418,19 +427,28 @@ elif st.session_state["current_tab_gc"] == "⚖️ 3. ĐỊNH LƯỢNG SẢN PH�
                 except:
                     pdf.set_font("Arial", size=10)
                     
-                pdf.cell(30, 10, "Mã SP", border=1, align='C')
-                pdf.cell(90, 10, "Tên Sản Phẩm", border=1, align='C')
-                pdf.cell(70, 10, "Trọng Lượng", border=1, align='C')
+                pdf.cell(20, 10, "Mã SP", border=1, align='C')
+                pdf.cell(50, 10, "Tên Sản Phẩm", border=1, align='C')
+                pdf.cell(30, 10, "Giá máy", border=1, align='C')
+                pdf.cell(20, 10, "Chu kỳ", border=1, align='C')
+                pdf.cell(25, 10, "SP/Khuôn", border=1, align='C')
+                pdf.cell(45, 10, "Trọng Lượng", border=1, align='C')
                 pdf.ln()
                 
                 for i, row in dataframe.iterrows():
                     ma = str(row['Mã SP'])
                     ten = str(row['Tên Sản Phẩm'])
+                    gm = str(row['Giá máy'])
+                    ck = str(row['Chu kỳ'])
+                    spk = str(row['SP/Khuôn'])
                     tl = str(row['Định Lượng (Trọng lượng)'])
                     
-                    pdf.cell(30, 10, ma, border=1, align='C')
-                    pdf.cell(90, 10, ten, border=1, align='L')
-                    pdf.cell(70, 10, tl, border=1, align='C')
+                    pdf.cell(20, 10, ma, border=1, align='C')
+                    pdf.cell(50, 10, ten, border=1, align='L')
+                    pdf.cell(30, 10, gm, border=1, align='C')
+                    pdf.cell(20, 10, ck, border=1, align='C')
+                    pdf.cell(25, 10, spk, border=1, align='C')
+                    pdf.cell(45, 10, tl, border=1, align='C')
                     pdf.ln()
                 
                 return bytes(pdf.output())
