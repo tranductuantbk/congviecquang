@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import time
 from datetime import datetime
 from sqlalchemy import text
 
@@ -20,20 +21,53 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# QUẢN LÝ DỮ LIỆU ĐÁM MÂY (NEON)
+# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
+# ==========================================
+def verify_database_connection(conn_obj, max_retries=3, delay=2):
+    for attempt in range(max_retries):
+        try:
+            with conn_obj.session as session:
+                session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return False
+
+if "db_load_success" not in st.session_state:
+    st.session_state["db_load_success"] = False
+
+is_connected = verify_database_connection(conn)
+st.session_state["db_load_success"] = is_connected
+
+if not is_connected:
+    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
+    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
+    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
+    st.stop()
+
+
+# ==========================================
+# QUẢN LÝ DỮ LIỆU ĐÁM MÂY (NEON) CÓ LÁ CHẮN
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=86400) 
 def fetch_data_from_db(table_name):
     try:
         return conn.query(f'SELECT * FROM "{table_name}"', ttl=0)
     except Exception:
-        return pd.DataFrame()
+        # Trả None để Lính gác bắt được lỗi đứt mạng
+        return None
 
 def force_reload_cache():
     fetch_data_from_db.clear()
 
 def load_data(table_name, columns):
     df = fetch_data_from_db(table_name)
+    if df is None:
+        st.session_state["db_load_success"] = False
+        st.error(f"⏳ Máy chủ Neon chưa sẵn sàng. Mất kết nối khi tải dữ liệu bảng '{table_name}'.")
+        return pd.DataFrame(columns=columns)
     if df.empty:
         return pd.DataFrame(columns=columns)
     for col in columns:
@@ -42,6 +76,11 @@ def load_data(table_name, columns):
     return df
 
 def append_data(new_row_dict, table_name, df_current):
+    # 🛡️ CHỐT KHÓA BẢO VỆ
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể thêm dữ liệu! Database đang mất kết nối. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         df_new = pd.DataFrame([new_row_dict])
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
@@ -55,6 +94,11 @@ def append_data(new_row_dict, table_name, df_current):
             st.error(f"⚠️ Lỗi cấu trúc: {str(e2)}")
 
 def save_data(df, table_name):
+    # 🛡️ CHỐT KHÓA BẢO VỆ
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu đè! Dữ liệu gốc từ đám mây chưa tải xong. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         df.to_sql(table_name, con=conn.engine, if_exists='replace', index=False)
         force_reload_cache()
@@ -75,7 +119,7 @@ DEFAULT_PLASTICS = [
 ]
 
 df_plastics = load_data("wanchi_plastics", ["Tên nhựa", "Tỉ trọng (g/cm3)"])
-if df_plastics.empty:
+if df_plastics.empty and st.session_state.get("db_load_success", False):
     df_plastics = pd.DataFrame(DEFAULT_PLASTICS)
     save_data(df_plastics, "wanchi_plastics")
 
