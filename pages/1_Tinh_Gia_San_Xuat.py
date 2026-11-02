@@ -1,30 +1,10 @@
 import streamlit as st
 import pandas as pd
+from sqlalchemy import inspect, text
 import time
-from fpdf import FPDF
-import unicodedata
-from datetime import datetime
-from sqlalchemy import text
-import os
 import io
-
-# Import lá chắn bảo vệ
-from security_guard import setup_global_shield
-
-# ==========================================
-# CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
-# ==========================================
-
-try:
-    conn = st.connection("postgresql", type="sql")
-except Exception as e:
-    st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
-    st.stop()
-
-# KÍCH HOẠT LÁ CHẮN NGAY TẠI ĐÂY
-setup_global_shield(conn)
-
-# ... (Toàn bộ phần code cũ của bạn từ dòng "def remove_accents(input_str):" trở xuống giữ nguyên) ...
+from fpdf import FPDF
+import math
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Tính Giá Sản Xuất", layout="wide")
@@ -44,35 +24,75 @@ except Exception as e:
     st.error("Chưa thể kết nối Database Neon. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
+# ==========================================
+# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
+# ==========================================
+def verify_database_connection(conn_obj, max_retries=3, delay=2):
+    for attempt in range(max_retries):
+        try:
+            with conn_obj.session as session:
+                session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return False
+
+if "db_load_success" not in st.session_state:
+    st.session_state["db_load_success"] = False
+
+is_connected = verify_database_connection(conn)
+st.session_state["db_load_success"] = is_connected
+
+if not is_connected:
+    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
+    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
+    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
+    st.stop()
+
+# ==========================================
+# HÀM XỬ LÝ DỮ LIỆU (CÓ KHÓA BẢO VỆ)
+# ==========================================
 def load_data():
     try:
         inspector = inspect(conn.engine)
         if not inspector.has_table("wanchi_sanpham"):
+            st.session_state["db_load_success"] = True
             return []
         df = pd.read_sql("SELECT * FROM wanchi_sanpham", con=conn.engine)
+        st.session_state["db_load_success"] = True # Đánh dấu đã tải thành công
         if not df.empty:
             if "Giá Tiêu Chuẩn" in df.columns:
                 df.rename(columns={"Giá Tiêu Chuẩn": "Giá Công ty"}, inplace=True)
             return df.to_dict('records')
         return []
     except Exception as e:
-        st.warning("⏳ Máy chủ dữ liệu đang khởi động. Vui lòng đợi 3 giây rồi tải lại.")
+        st.session_state["db_load_success"] = False # Bật chốt khóa nếu lỗi
+        st.error("⏳ Máy chủ dữ liệu Neon đang mất kết nối. Chưa thể tải dữ liệu.")
         return None
 
 def save_data(data_list):
+    # 🛡️ CHẶN LƯU ĐÈ NẾU CHƯA LOAD THÀNH CÔNG
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu! Dữ liệu gốc từ máy chủ chưa được tải xuống hoàn tất. Nếu lưu bây giờ sẽ xóa mất dữ liệu cũ. Vui lòng bấm F5 (Tải lại trang).")
+        st.stop()
+        return
+        
     try:
         df = pd.DataFrame(data_list)
         if df.empty:
             df = pd.DataFrame(columns=["Mã SP", "Tên Sản Phẩm", "Trọng lượng", "Đơn giá nhựa", "Giá máy", "Chu kỳ", "SP Khuôn", "Bao bì", "Phụ kiện", "Chi phí đóng gói", "Đơn giá phụ gia", "Tỉ lệ phụ gia", "Giá trị khuôn", "SL khuôn", "Hệ số ĐL", "Giá Vốn", "Giá Đại Lý", "Giá Công ty"])
         df.to_sql("wanchi_sanpham", con=conn.engine, if_exists='replace', index=False)
     except Exception as e:
-        pass
+        st.error(f"⚠️ Lỗi khi lưu dữ liệu: {e}")
 
 # ==========================================
 # QUẢN LÝ TRẠNG THÁI (SESSION STATE)
 # ==========================================
 if "danh_sach_sp" not in st.session_state or st.session_state["danh_sach_sp"] is None:
-    st.session_state["danh_sach_sp"] = load_data()
+    loaded = load_data()
+    st.session_state["danh_sach_sp"] = loaded if loaded is not None else []
 
 if st.session_state["danh_sach_sp"] is None:
     st.session_state["danh_sach_sp"] = []
