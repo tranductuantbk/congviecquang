@@ -22,6 +22,34 @@ except Exception as e:
     st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
     st.stop()
 
+# ==========================================
+# 🛡️ LÍNH GÁC (GATEKEEPER) BẢO VỆ DỮ LIỆU
+# ==========================================
+def verify_database_connection(conn_obj, max_retries=3, delay=2):
+    for attempt in range(max_retries):
+        try:
+            with conn_obj.session as session:
+                session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return False
+
+if "db_load_success" not in st.session_state:
+    st.session_state["db_load_success"] = False
+
+is_connected = verify_database_connection(conn)
+st.session_state["db_load_success"] = is_connected
+
+if not is_connected:
+    st.error("🚨 HỆ THỐNG ĐANG BỊ KHÓA AN TOÀN 🚨")
+    st.error("⏳ Máy chủ cơ sở dữ liệu (Neon) đang ngủ đông hoặc đứt kết nối mạng.")
+    st.warning("👉 Hệ thống tự động vô hiệu hóa mọi chức năng để bảo vệ dữ liệu. Vui lòng ấn F5 (Tải lại trang) cho đến khi thông báo này biến mất.")
+    st.stop()
+
+
 def remove_accents(input_str):
     s = str(input_str).replace('Đ', 'D').replace('đ', 'd')
     nfkd_form = unicodedata.normalize('NFKD', s)
@@ -251,13 +279,18 @@ def fetch_data_from_db(table_name):
     try:
         return conn.query(f"SELECT * FROM {table_name}", ttl=0)
     except Exception:
-        return pd.DataFrame()
+        # Thay vì trả DataFrame(), trả None để Lính gác bắt được lỗi đứt kết nối
+        return None
 
 def force_reload_cache():
     fetch_data_from_db.clear()
 
 def load_data(table_name, columns):
     df = fetch_data_from_db(table_name)
+    if df is None:
+        st.session_state["db_load_success"] = False
+        st.error(f"⏳ Máy chủ Neon chưa sẵn sàng. Mất kết nối khi tải dữ liệu bảng '{table_name}'.")
+        return pd.DataFrame(columns=columns)
     if df.empty:
         return pd.DataFrame(columns=columns)
     for col in columns:
@@ -266,6 +299,11 @@ def load_data(table_name, columns):
     return df
 
 def append_data(new_row_dict, table_name, df_current):
+    # 🛡️ CHỐT KHÓA BẢO VỆ DỮ LIỆU
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể thêm dữ liệu! Database đang mất kết nối. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         df_new = pd.DataFrame([new_row_dict])
         df_new.to_sql(table_name, con=conn.engine, if_exists='append', index=False)
@@ -279,6 +317,11 @@ def append_data(new_row_dict, table_name, df_current):
             st.error(f"⚠️ Lỗi cấu trúc: {str(e2)}")
 
 def save_data(df, table_name):
+    # 🛡️ CHỐT KHÓA BẢO VỆ DỮ LIỆU
+    if not st.session_state.get("db_load_success", False):
+        st.error("🚨 LỆNH BỊ CHẶN: Không thể lưu đè! Dữ liệu gốc từ đám mây chưa tải xong. Vui lòng ấn F5.")
+        st.stop()
+        
     try:
         try:
             with conn.session as session:
@@ -494,7 +537,6 @@ elif st.session_state.current_tab == "B. Gia Công":
             
             c10, c11, _ = st.columns(3)
             don_phoi = c10.number_input("Dọn phôi", min_value=0, step=1)
-            # --- CẬP NHẬT: Đổi tên thành Ráp khuôn hoàn chỉnh ---
             rap_khuon = c11.number_input("Ráp khuôn hoàn chỉnh", min_value=0, step=1)
             
             st.markdown("---")
