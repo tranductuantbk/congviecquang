@@ -1,9 +1,30 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import inspect
-import io
+import time
 from fpdf import FPDF
-import math
+import unicodedata
+from datetime import datetime
+from sqlalchemy import text
+import os
+import io
+
+# Import lá chắn bảo vệ
+from security_guard import setup_global_shield
+
+# ==========================================
+# CẤU HÌNH TRANG & KẾT NỐI NEON (POSTGRESQL)
+# ==========================================
+
+try:
+    conn = st.connection("postgresql", type="sql")
+except Exception as e:
+    st.error("Chưa thể kết nối đến cơ sở dữ liệu. Vui lòng kiểm tra lại file cấu hình Secrets.")
+    st.stop()
+
+# KÍCH HOẠT LÁ CHẮN NGAY TẠI ĐÂY
+setup_global_shield(conn)
+
+# ... (Toàn bộ phần code cũ của bạn từ dòng "def remove_accents(input_str):" trở xuống giữ nguyên) ...
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Tính Giá Sản Xuất", layout="wide")
