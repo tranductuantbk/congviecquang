@@ -48,11 +48,49 @@ if not is_connected:
     st.stop()
 
 # ==========================================
+# KHỞI TẠO BẢNG LƯU TRỮ CẤU HÌNH QUẢN TRỊ
+# ==========================================
+try:
+    with conn.session as session:
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS public.quan_tri_config (
+                key_name TEXT PRIMARY KEY,
+                key_value TEXT
+            )
+        """))
+        session.commit()
+except Exception:
+    pass
+
+# Lấy thông tin ngày backup gần nhất
+last_backup_date = None
+try:
+    with conn.session as session:
+        result = session.execute(text("SELECT key_value FROM public.quan_tri_config WHERE key_name='last_backup_date'")).fetchone()
+        if result:
+            last_backup_date = datetime.strptime(result[0], "%Y-%m-%d")
+except Exception:
+    pass
+
+# ==========================================
 # GIAO DIỆN QUẢN TRỊ TRUNG TÂM
 # ==========================================
 st.title("⚙️ BẢNG ĐIỀU KHIỂN QUẢN TRỊ TRUNG TÂM")
 st.markdown("Khu vực dành riêng cho Quản lý để **Sao lưu (Backup)** và **Phục hồi (Restore)** toàn bộ dữ liệu hệ thống.")
 st.write("---")
+
+# --- CẢNH BÁO SAU 30 NGÀY CHƯA BACKUP ---
+if last_backup_date:
+    days_since = (datetime.today() - last_backup_date).days
+    if days_since > 30:
+        st.error(f"🚨 **CẢNH BÁO TỚI HẠN SAO LƯU:** Đã **{days_since} ngày** kể từ lần sao lưu cuối cùng (ngày {last_backup_date.strftime('%d/%m/%Y')}). Vui lòng tạo bản sao lưu mới để phòng tránh rủi ro mất dữ liệu!")
+    else:
+        st.success(f"✅ Dữ liệu an toàn. Lần sao lưu gần nhất: **{last_backup_date.strftime('%d/%m/%Y')}** ({days_since} ngày trước).")
+else:
+    st.warning("⚠️ Hệ thống chưa ghi nhận bất kỳ bản sao lưu nào. Vui lòng tạo bản sao lưu đầu tiên!")
+
+st.write("---")
+
 
 col_backup, col_restore = st.columns(2)
 
@@ -96,7 +134,23 @@ with col_backup:
                             pass
                 
                 st.session_state["backup_zip"] = zip_buffer.getvalue()
+                
+                # BƯỚC 3: CẬP NHẬT LẠI NGÀY BACKUP VÀO DATABASE
+                try:
+                    today_str = datetime.today().strftime("%Y-%m-%d")
+                    with conn.session as session:
+                        session.execute(text(f"""
+                            INSERT INTO public.quan_tri_config (key_name, key_value) 
+                            VALUES ('last_backup_date', '{today_str}')
+                            ON CONFLICT (key_name) DO UPDATE SET key_value = EXCLUDED.key_value
+                        """))
+                        session.commit()
+                except Exception:
+                    pass
+
                 st.success(f"✅ Đã quét thấy và đóng gói thành công {so_luong_bang} module dữ liệu!")
+                time.sleep(1)
+                st.rerun() # Refresh để cập nhật lại thông báo ngày
             else:
                 st.warning("⚠️ Không tìm thấy bảng dữ liệu nào trên đám mây.")
         
@@ -104,7 +158,7 @@ with col_backup:
         st.download_button(
             label="⬇️ CLICK VÀO ĐÂY ĐỂ TẢI FILE ZIP VỀ MÁY",
             data=st.session_state["backup_zip"],
-            file_name=f"Wanchi_Backup_ToanHeThong_{datetime.today().strftime('%d_%m_%Y')}.zip",
+            file_name=f"congviecquang backup {datetime.today().strftime('%d %m %Y')}.zip",
             mime="application/zip",
             type="primary",
             use_container_width=True
