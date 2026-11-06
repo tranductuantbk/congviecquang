@@ -36,16 +36,26 @@ if not st.session_state.logged_in:
     pg.run()
     
 else:
-    # NẾU ĐÃ ĐĂNG NHẬP: Hiển thị Nút Đăng Xuất và Tải 3 Module của bạn lên
+    # NẾU ĐÃ ĐĂNG NHẬP: Hiển thị Nút Đăng Xuất và Tải các Module của bạn lên
     st.sidebar.markdown("### 🏭 BẢNG ĐIỀU KHIỂN")
     st.sidebar.button("Đăng Xuất", on_click=logout, use_container_width=True)
     st.sidebar.markdown("---")
     
-    # Khai báo đường dẫn tới 3 file của bạn
-    mod1 = st.Page("modules/1_Tinh_Gia_San_Xuat.py", title="1. Tính Giá Sản Xuất", icon="🧮")
-    mod2 = st.Page("modules/2_Tinh_Gia_Gia_Cong.py", title="2. Tính Giá Gia Công", icon="⚙️")
-    mod3 = st.Page("modules/3_Quan_Ly_Khuon_Mau.py", title="3. Quản Lý Khuôn", icon="🏭")
+    # Khai báo đường dẫn tới các file module của bạn theo tên MỚI
+    pages = {
+        "QUẢN TRỊ HỆ THỐNG": [
+            st.Page("modules/0_Quản trị hệ thống.py", title="⚙️ Quản Trị Hệ Thống", icon="⚙️")
+        ],
+        "CÔNG CỤ TÍNH TOÁN & QUẢN LÝ": [
+            st.Page("modules/2_Tính giá gia công.py", title="⚙️ Tính Giá Gia Công", icon="2️⃣"),
+            st.Page("modules/3_Tính giá sản xuất.py", title="💰 Tính Giá Sản Xuất", icon="3️⃣"),
+            st.Page("modules/4_Quản lý khuôn mẫu.py", title="🏭 Quản Lý Khuôn Mẫu", icon="4️⃣"),
+            st.Page("modules/5_Tạo đơn đặt hàng.py", title="📦 Quản Lý Giao Việc", icon="5️⃣"),
+            st.Page("modules/6_Tính giá cost.py", title="📊 Tính Giá Cost", icon="6️⃣"),
+            st.Page("modules/7_Tính trọng lượng.py", title="⚖️ Tính Trọng Lượng", icon="7️⃣")
+        ]
+    }
     
     # Chạy menu điều hướng
-    pg = st.navigation([mod1, mod2, mod3])
+    pg = st.navigation(pages)
     pg.run()
