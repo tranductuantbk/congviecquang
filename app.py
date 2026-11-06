@@ -16,7 +16,8 @@ def login_screen():
     with col2:
         pwd = st.text_input("Mật khẩu:", type="password", placeholder="Nhập pass...")
         if st.button("🚀 ĐĂNG NHẬP", use_container_width=True):
-            if pwd == "Wanchi@2026":  # <-- BẠN CÓ THỂ ĐỔI PASS Ở ĐÂY
+            # Pass được thiết lập giống như file trang chu.py của bạn
+            if pwd == "tbk1102": 
                 st.session_state.logged_in = True
                 st.rerun() # Tải lại trang để bung menu
             else:
@@ -41,10 +42,10 @@ else:
     st.sidebar.button("Đăng Xuất", on_click=logout, use_container_width=True)
     st.sidebar.markdown("---")
     
-    # Khai báo đường dẫn tới các file module của bạn theo tên MỚI
+    # Khai báo đường dẫn tới các file module của bạn theo đúng tên
     pages = {
-        "QUẢN TRỊ HỆ THỐNG": [
-            st.Page("modules/0_Quản trị hệ thống.py", title="⚙️ Quản Trị Hệ Thống", icon="⚙️")
+        "QUẢN LÝ CÔNG VIỆC": [
+            st.Page("modules/0_Quản lý công việc.py", title="⚙️ Quản Lý Công Việc", icon="⚙️")
         ],
         "CÔNG CỤ TÍNH TOÁN & QUẢN LÝ": [
             st.Page("modules/2_Tính giá gia công.py", title="⚙️ Tính Giá Gia Công", icon="2️⃣"),
