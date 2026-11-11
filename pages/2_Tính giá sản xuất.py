@@ -450,9 +450,16 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
         for sp in st.session_state["danh_sach_sp"]:
             ma_sp = sp.get("Mã SP", "")
             ten_sp = sp.get("Tên Sản Phẩm", "")
+            gia_may = sp.get("Giá máy", "")
+            chu_ky = sp.get("Chu kỳ", "")
+            sp_khuon = sp.get("SP Khuôn", "")
             trong_luong = sp.get("Trọng lượng", "")
             
-            if isinstance(trong_luong, (int, float)):
+            gia_may_hien_thi = f"{gia_may:,.0f}" if isinstance(gia_may, (int, float)) and pd.notna(gia_may) else "N/A"
+            chu_ky_hien_thi = f"{chu_ky}" if isinstance(chu_ky, (int, float)) and pd.notna(chu_ky) else "N/A"
+            sp_khuon_hien_thi = f"{int(sp_khuon)}" if isinstance(sp_khuon, (int, float)) and pd.notna(sp_khuon) else "N/A"
+            
+            if isinstance(trong_luong, (int, float)) and pd.notna(trong_luong):
                 tl_hien_thi = f"{trong_luong} g"
             elif isinstance(trong_luong, str):
                 tl_hien_thi = trong_luong
@@ -462,7 +469,10 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
             du_lieu_hien_thi.append({
                 "Mã SP": ma_sp,
                 "Tên Sản Phẩm": ten_sp,
-                "Định Lượng (Trọng lượng)": tl_hien_thi
+                "Giá máy": gia_may_hien_thi,
+                "Chu kỳ": chu_ky_hien_thi,
+                "SP/Khuôn": sp_khuon_hien_thi,
+                "Trọng lượng": tl_hien_thi
             })
             
         df_dinh_luong = pd.DataFrame(du_lieu_hien_thi)
@@ -510,20 +520,29 @@ elif st.session_state["current_tab_sx"] == "⚖️ 4. ĐỊNH LƯỢNG SẢN PH�
                     pdf.set_font("Arial", size=10)
                     
                 # Tiêu đề cột
-                pdf.cell(30, 10, "Mã SP", border=1, align='C')
-                pdf.cell(90, 10, "Tên Sản Phẩm", border=1, align='C')
-                pdf.cell(70, 10, "Trọng Lượng", border=1, align='C')
+                pdf.cell(25, 10, "Mã SP", border=1, align='C')
+                pdf.cell(65, 10, "Tên Sản Phẩm", border=1, align='C')
+                pdf.cell(30, 10, "Giá máy", border=1, align='C')
+                pdf.cell(20, 10, "Chu kỳ", border=1, align='C')
+                pdf.cell(20, 10, "SP/Khuôn", border=1, align='C')
+                pdf.cell(30, 10, "Trọng lượng", border=1, align='C')
                 pdf.ln()
                 
                 # Nội dung dữ liệu
                 for i, row in dataframe.iterrows():
                     ma = str(row['Mã SP'])
                     ten = str(row['Tên Sản Phẩm'])
-                    tl = str(row['Định Lượng (Trọng lượng)'])
+                    gm = str(row['Giá máy'])
+                    ck = str(row['Chu kỳ'])
+                    spk = str(row['SP/Khuôn'])
+                    tl = str(row['Trọng lượng'])
                     
-                    pdf.cell(30, 10, ma, border=1, align='C')
-                    pdf.cell(90, 10, ten, border=1, align='L')
-                    pdf.cell(70, 10, tl, border=1, align='C')
+                    pdf.cell(25, 10, ma, border=1, align='C')
+                    pdf.cell(65, 10, ten, border=1, align='L')
+                    pdf.cell(30, 10, gm, border=1, align='C')
+                    pdf.cell(20, 10, ck, border=1, align='C')
+                    pdf.cell(20, 10, spk, border=1, align='C')
+                    pdf.cell(30, 10, tl, border=1, align='C')
                     pdf.ln()
                 
                 return bytes(pdf.output())
