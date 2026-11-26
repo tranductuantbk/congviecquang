@@ -459,7 +459,7 @@ def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_ref
         if st.button("🖼️ Xuất ảnh các dòng đã chọn", use_container_width=True, key=f"btn_{state_key}"):
             selected = edited_df[edited_df["Chọn"] == True]
             if selected.empty:
-                st.warning("⚠️ Hãy tick vào cột 'In' ở những dòng bạn muốn xuất ảnh.")
+                st.warning("⚠️ Hãy tick vào cột 'Chọn' ở những dòng bạn muốn xuất ảnh.")
             else:
                 with st.spinner("Đang tạo ảnh báo cáo..."):
                     unique_molds = selected["Mã khuôn"].dropna().unique().tolist() if "Mã khuôn" in selected.columns else []
@@ -567,7 +567,7 @@ list_ngc = [x for x in list_ngc if str(x).strip()]
 # CẤU HÌNH CỘT CHUẨN (GỌN, KHÔNG CHE CHỮ)
 # ==========================================
 COL_CFG_NVL = {
-    "Chọn": st.column_config.CheckboxColumn("In", width="small"),
+    "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
     "Nhà cung cấp NVL": st.column_config.TextColumn("Nhà cung cấp", width="medium"),
@@ -579,7 +579,7 @@ COL_CFG_NVL = {
 }
 
 COL_CFG_GC = {
-    "Chọn": st.column_config.CheckboxColumn("In", width="small"),
+    "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
     "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="medium"),
@@ -595,7 +595,7 @@ COL_CFG_GC = {
 }
 
 COL_CFG_VT = {
-    "Chọn": st.column_config.CheckboxColumn("In", width="small"),
+    "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
     "Nhà cung cấp vật tư": st.column_config.TextColumn("Nhà cung cấp", width="medium"),
@@ -605,7 +605,7 @@ COL_CFG_VT = {
 }
 
 COL_CFG_SUM = {
-    "Chọn": st.column_config.CheckboxColumn("In", width="small"),
+    "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Ngày": st.column_config.TextColumn("Ngày tạo", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="medium"),
     "Tổng Nguyên Vật Liệu (A)": st.column_config.NumberColumn("Nguyên vật liệu", format="%,.0f", width="medium"),
@@ -615,7 +615,7 @@ COL_CFG_SUM = {
 }
 
 COL_CFG_DH = {
-    "Chọn": st.column_config.CheckboxColumn("In", width="small"),
+    "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
     "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="medium"),
     "Các mục gia công": st.column_config.TextColumn("Hạng mục", width="large"),
@@ -736,7 +736,6 @@ if st.session_state.active_page == nav_options[0]:
         with st.expander(f"⚙️ Chi tiết Gia Công ({len(df_gc[df_gc['Mã khuôn'] == selected_mold])} dòng)"):
             sub_gc = prep_numeric_cols(df_gc[df_gc["Mã khuôn"] == selected_mold], gc_stages + ["Tổng tiền"])
             if not sub_gc.empty:
-                # Hiển thị bảng dọc tổng hợp 8 công đoạn của khuôn này
                 stage_totals = [{"Công đoạn gia công": stg, "Chi phí (VNĐ)": float(sub_gc[stg].sum())} for stg in gc_stages if float(sub_gc[stg].sum()) > 0]
                 if stage_totals:
                     st.caption("Tóm tắt theo từng công đoạn (chiều dọc):")
@@ -794,12 +793,25 @@ if st.session_state.active_page == nav_options[0]:
     )
     edited_sum["Chọn"] = edited_sum["Chọn"].fillna(False).astype(bool)
 
-    if st.button("💾 Lưu Thay Đổi Bảng Tổng Hợp", type="primary", use_container_width=True):
-        with st.spinner("Đang lưu..."):
-            save_data(edited_sum.drop(columns=["Chọn"]), "wanchi_d")
-        st.success("✅ Đã lưu bảng tổng hợp!")
-        time.sleep(1)
-        st.rerun()
+    b_sum1, b_sum2 = st.columns(2)
+    with b_sum1:
+        if st.button("💾 Lưu Thay Đổi Bảng Tổng Hợp", type="primary", use_container_width=True):
+            with st.spinner("Đang lưu..."):
+                save_data(edited_sum.drop(columns=["Chọn"]), "wanchi_d")
+            st.success("✅ Đã lưu bảng tổng hợp!")
+            time.sleep(1)
+            st.rerun()
+    with b_sum2:
+        if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_sum"):
+            if not edited_sum["Chọn"].any():
+                st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 dòng cần xóa.")
+            else:
+                with st.spinner("Đang xóa dòng đã chọn..."):
+                    remaining = edited_sum[edited_sum["Chọn"] == False].drop(columns=["Chọn"])
+                    save_data(remaining, "wanchi_d")
+                st.success("✅ Đã xóa các dòng đã chọn!")
+                time.sleep(1)
+                st.rerun()
 
     render_export_image_bar(edited_sum, "BẢNG TỔNG HỢP CHI PHÍ KHUÔN", "TongHop", "sum_page", df_nvl)
 
@@ -820,7 +832,6 @@ elif st.session_state.active_page == nav_options[1]:
     # ---------------- TAB 1: NGUYÊN VẬT LIỆU ----------------
     with tab_nvl:
         with st.expander("➕ Thêm Nguyên Vật Liệu Mới", expanded=False):
-            # Bố cục dọc thoáng (2 cột rộng, không bị che chữ)
             r1c1, r1c2 = st.columns(2)
             ngay_a = r1c1.date_input("Ngày nhập", datetime.today(), key="ngay_nvl")
             mk_a = r1c2.selectbox("Mã khuôn", list_molds, index=default_idx, key="mk_nvl") if list_molds else r1c2.text_input("Mã khuôn", key="mk_nvl_txt")
@@ -882,17 +893,35 @@ elif st.session_state.active_page == nav_options[1]:
         )
         edited_nvl["Chọn"] = edited_nvl["Chọn"].fillna(False).astype(bool)
 
-        if st.button("💾 Lưu Chỉnh Sửa Bảng Nguyên Vật Liệu", type="primary", use_container_width=True, key="upd_nvl"):
-            with st.spinner("Đang cập nhật..."):
-                merged = merge_filtered_edits(df_nvl, edited_nvl, filter_mold)
-                save_data(merged, "wanchi_a")
-                if filter_mold != "Tất cả":
-                    auto_sync_mold_to_summary(filter_mold, merged, df_gc, df_vt, df_sum)
+        b_nvl1, b_nvl2 = st.columns(2)
+        with b_nvl1:
+            if st.button("💾 Lưu Chỉnh Sửa Bảng Nguyên Vật Liệu", type="primary", use_container_width=True, key="upd_nvl"):
+                with st.spinner("Đang cập nhật..."):
+                    merged = merge_filtered_edits(df_nvl, edited_nvl, filter_mold)
+                    save_data(merged, "wanchi_a")
+                    if filter_mold != "Tất cả":
+                        auto_sync_mold_to_summary(filter_mold, merged, df_gc, df_vt, df_sum)
+                    else:
+                        sync_all_molds_to_summary(list_molds, merged, df_gc, df_vt, df_sum)
+                st.success("✅ Đã cập nhật Nguyên vật liệu!")
+                time.sleep(1)
+                st.rerun()
+        with b_nvl2:
+            if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_nvl"):
+                if not edited_nvl["Chọn"].any():
+                    st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 dòng cần xóa.")
                 else:
-                    sync_all_molds_to_summary(list_molds, merged, df_gc, df_vt, df_sum)
-            st.success("✅ Đã cập nhật Nguyên vật liệu!")
-            time.sleep(1)
-            st.rerun()
+                    with st.spinner("Đang xóa và đồng bộ lại bảng tổng..."):
+                        remaining_view = edited_nvl[edited_nvl["Chọn"] == False]
+                        merged = merge_filtered_edits(df_nvl, remaining_view, filter_mold)
+                        save_data(merged, "wanchi_a")
+                        if filter_mold != "Tất cả":
+                            auto_sync_mold_to_summary(filter_mold, merged, df_gc, df_vt, df_sum)
+                        else:
+                            sync_all_molds_to_summary(list_molds, merged, df_gc, df_vt, df_sum)
+                    st.success("✅ Đã xóa các dòng đã chọn!")
+                    time.sleep(1)
+                    st.rerun()
 
         render_export_image_bar(edited_nvl, "BÁO CÁO NGUYÊN VẬT LIỆU", "NVL", "exp_nvl", df_nvl)
 
@@ -905,7 +934,15 @@ elif st.session_state.active_page == nav_options[1]:
 
             dv_b = partner_selector("Đơn vị gia công", list_ngc, "ngc_gc")
 
-            st.markdown("**Nhập chi phí theo từng công đoạn (bảng dọc):**")
+            if "gc_stage_reset" not in st.session_state:
+                st.session_state["gc_stage_reset"] = 0
+
+            hdr_st1, hdr_st2 = st.columns([3, 1])
+            hdr_st1.markdown("**Nhập chi phí theo từng công đoạn (bảng dọc):**")
+            if hdr_st2.button("🧹 Xóa trắng số liệu", use_container_width=True, key="reset_gc_stage"):
+                st.session_state["gc_stage_reset"] += 1
+                st.rerun()
+
             df_stage_input = pd.DataFrame({
                 "Công đoạn": gc_stages,
                 "Chi phí (VNĐ)": [0] * len(gc_stages)
@@ -919,7 +956,7 @@ elif st.session_state.active_page == nav_options[1]:
                     "Công đoạn": st.column_config.TextColumn("Công đoạn gia công", width="large"),
                     "Chi phí (VNĐ)": st.column_config.NumberColumn("Chi phí (VNĐ)", min_value=0, step=10000, format="%,.0f", width="medium"),
                 },
-                key="stage_vertical_editor"
+                key=f"stage_vertical_editor_{st.session_state['gc_stage_reset']}"
             )
 
             stage_map = dict(zip(edited_stages["Công đoạn"], pd.to_numeric(edited_stages["Chi phí (VNĐ)"], errors='coerce').fillna(0)))
@@ -955,6 +992,7 @@ elif st.session_state.active_page == nav_options[1]:
                         append_data(row_gc, "wanchi_b", df_gc)
                         df_gc_new = pd.concat([df_gc, pd.DataFrame([row_gc])], ignore_index=True)
                         auto_sync_mold_to_summary(mk_up, df_nvl, df_gc_new, df_vt, df_sum)
+                        st.session_state["gc_stage_reset"] += 1
                     st.success("✅ Đã lưu chi phí Gia công!")
                     time.sleep(1)
                     st.rerun()
@@ -974,17 +1012,35 @@ elif st.session_state.active_page == nav_options[1]:
         )
         edited_gc["Chọn"] = edited_gc["Chọn"].fillna(False).astype(bool)
 
-        if st.button("💾 Lưu Chỉnh Sửa Bảng Gia Công", type="primary", use_container_width=True, key="upd_gc"):
-            with st.spinner("Đang cập nhật..."):
-                merged = merge_filtered_edits(df_gc, edited_gc, filter_mold)
-                save_data(merged, "wanchi_b")
-                if filter_mold != "Tất cả":
-                    auto_sync_mold_to_summary(filter_mold, df_nvl, merged, df_vt, df_sum)
+        b_gc1, b_gc2 = st.columns(2)
+        with b_gc1:
+            if st.button("💾 Lưu Chỉnh Sửa Bảng Gia Công", type="primary", use_container_width=True, key="upd_gc"):
+                with st.spinner("Đang cập nhật..."):
+                    merged = merge_filtered_edits(df_gc, edited_gc, filter_mold)
+                    save_data(merged, "wanchi_b")
+                    if filter_mold != "Tất cả":
+                        auto_sync_mold_to_summary(filter_mold, df_nvl, merged, df_vt, df_sum)
+                    else:
+                        sync_all_molds_to_summary(list_molds, df_nvl, merged, df_vt, df_sum)
+                st.success("✅ Đã cập nhật Gia công!")
+                time.sleep(1)
+                st.rerun()
+        with b_gc2:
+            if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_gc"):
+                if not edited_gc["Chọn"].any():
+                    st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 dòng cần xóa.")
                 else:
-                    sync_all_molds_to_summary(list_molds, df_nvl, merged, df_vt, df_sum)
-            st.success("✅ Đã cập nhật Gia công!")
-            time.sleep(1)
-            st.rerun()
+                    with st.spinner("Đang xóa và đồng bộ lại bảng tổng..."):
+                        remaining_view = edited_gc[edited_gc["Chọn"] == False]
+                        merged = merge_filtered_edits(df_gc, remaining_view, filter_mold)
+                        save_data(merged, "wanchi_b")
+                        if filter_mold != "Tất cả":
+                            auto_sync_mold_to_summary(filter_mold, df_nvl, merged, df_vt, df_sum)
+                        else:
+                            sync_all_molds_to_summary(list_molds, df_nvl, merged, df_vt, df_sum)
+                    st.success("✅ Đã xóa các dòng đã chọn!")
+                    time.sleep(1)
+                    st.rerun()
 
         render_export_image_bar(edited_gc, "BÁO CÁO CHI PHÍ GIA CÔNG", "GiaCong", "exp_gc", df_nvl)
 
@@ -1047,17 +1103,35 @@ elif st.session_state.active_page == nav_options[1]:
         )
         edited_vt["Chọn"] = edited_vt["Chọn"].fillna(False).astype(bool)
 
-        if st.button("💾 Lưu Chỉnh Sửa Bảng Vật Tư", type="primary", use_container_width=True, key="upd_vt"):
-            with st.spinner("Đang cập nhật..."):
-                merged = merge_filtered_edits(df_vt, edited_vt, filter_mold)
-                save_data(merged, "wanchi_c")
-                if filter_mold != "Tất cả":
-                    auto_sync_mold_to_summary(filter_mold, df_nvl, df_gc, merged, df_sum)
+        b_vt1, b_vt2 = st.columns(2)
+        with b_vt1:
+            if st.button("💾 Lưu Chỉnh Sửa Bảng Vật Tư", type="primary", use_container_width=True, key="upd_vt"):
+                with st.spinner("Đang cập nhật..."):
+                    merged = merge_filtered_edits(df_vt, edited_vt, filter_mold)
+                    save_data(merged, "wanchi_c")
+                    if filter_mold != "Tất cả":
+                        auto_sync_mold_to_summary(filter_mold, df_nvl, df_gc, merged, df_sum)
+                    else:
+                        sync_all_molds_to_summary(list_molds, df_nvl, df_gc, merged, df_sum)
+                st.success("✅ Đã cập nhật Vật tư!")
+                time.sleep(1)
+                st.rerun()
+        with b_vt2:
+            if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_vt"):
+                if not edited_vt["Chọn"].any():
+                    st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 dòng cần xóa.")
                 else:
-                    sync_all_molds_to_summary(list_molds, df_nvl, df_gc, merged, df_sum)
-            st.success("✅ Đã cập nhật Vật tư!")
-            time.sleep(1)
-            st.rerun()
+                    with st.spinner("Đang xóa và đồng bộ lại bảng tổng..."):
+                        remaining_view = edited_vt[edited_vt["Chọn"] == False]
+                        merged = merge_filtered_edits(df_vt, remaining_view, filter_mold)
+                        save_data(merged, "wanchi_c")
+                        if filter_mold != "Tất cả":
+                            auto_sync_mold_to_summary(filter_mold, df_nvl, df_gc, merged, df_sum)
+                        else:
+                            sync_all_molds_to_summary(list_molds, df_nvl, df_gc, merged, df_sum)
+                    st.success("✅ Đã xóa các dòng đã chọn!")
+                    time.sleep(1)
+                    st.rerun()
 
         render_export_image_bar(edited_vt, "BÁO CÁO VẬT TƯ KHUÔN MẪU", "VatTu", "exp_vt", df_nvl)
 
@@ -1145,18 +1219,35 @@ elif st.session_state.active_page == nav_options[2]:
 
     is_filtered_dh = (f_mk != "Tất cả" or f_dv != "Tất cả")
     if is_filtered_dh:
-        st.caption("💡 Hãy đưa 2 bộ lọc về 'Tất cả' để bật nút lưu chỉnh sửa trực tiếp trên bảng.")
+        st.caption("💡 Hãy đưa 2 bộ lọc về 'Tất cả' để bật nút lưu chỉnh sửa trực tiếp (nút Xóa vẫn dùng được bình thường).")
 
-    if st.button("💾 Lưu Cập Nhật Đơn Hàng (Tự tính lại Còn nợ)", type="primary", use_container_width=True, disabled=is_filtered_dh):
-        with st.spinner("Đang cập nhật..."):
-            df_save = edited_dh.drop(columns=["Chọn"]).copy()
-            tg = pd.to_numeric(df_save["Tổng giá gia công"], errors='coerce').fillna(0)
-            cc = pd.to_numeric(df_save["Cọc đợt 1"], errors='coerce').fillna(0)
-            df_save["Còn nợ"] = tg - cc
-            save_data(df_save, "wanchi_f")
-        st.success("✅ Đã cập nhật đơn hàng và công nợ!")
-        time.sleep(1)
-        st.rerun()
+    b_dh1, b_dh2 = st.columns(2)
+    with b_dh1:
+        if st.button("💾 Lưu Cập Nhật Đơn Hàng (Tự tính lại Còn nợ)", type="primary", use_container_width=True, disabled=is_filtered_dh):
+            with st.spinner("Đang cập nhật..."):
+                df_save = edited_dh.drop(columns=["Chọn"]).copy()
+                tg = pd.to_numeric(df_save["Tổng giá gia công"], errors='coerce').fillna(0)
+                cc = pd.to_numeric(df_save["Cọc đợt 1"], errors='coerce').fillna(0)
+                df_save["Còn nợ"] = tg - cc
+                save_data(df_save, "wanchi_f")
+            st.success("✅ Đã cập nhật đơn hàng và công nợ!")
+            time.sleep(1)
+            st.rerun()
+    with b_dh2:
+        if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_dh"):
+            if not edited_dh["Chọn"].any():
+                st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 đơn hàng cần xóa.")
+            else:
+                with st.spinner("Đang xóa đơn hàng đã chọn..."):
+                    if not is_filtered_dh:
+                        df_rem = edited_dh[edited_dh["Chọn"] == False].drop(columns=["Chọn"]).copy()
+                    else:
+                        idx_to_drop = [i for i in edited_dh[edited_dh["Chọn"] == True].index if i in df_dh.index]
+                        df_rem = df_dh.drop(index=idx_to_drop).copy()
+                    save_data(df_rem, "wanchi_f")
+                st.success("✅ Đã xóa các đơn hàng đã chọn!")
+                time.sleep(1)
+                st.rerun()
 
     render_export_image_bar(edited_dh, "ĐƠN HÀNG GIA CÔNG", "DonHang", "exp_dh", df_nvl, include_vendor=True)
 
@@ -1181,14 +1272,18 @@ elif st.session_state.active_page == nav_options[3]:
 
     st.markdown("---")
     st.subheader("🤝 Danh Sách Đối Tác Hiện Hành")
-    st.caption("Bạn có thể sửa tên, đổi phân loại hoặc xóa dòng trực tiếp trong bảng rồi bấm Lưu.")
+    st.caption("Tick vào cột 'Chọn' để xóa nhanh, hoặc sửa trực tiếp rồi bấm Lưu.")
+
+    df_dt_view = df_dt.copy()
+    df_dt_view.insert(0, "Chọn", False)
 
     edited_dt = st.data_editor(
-        df_dt,
+        df_dt_view,
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
         column_config={
+            "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để xóa đối tác", width="small"),
             "Phân loại": st.column_config.SelectboxColumn(
                 "Phân loại",
                 options=["Nhà cung cấp (NCC)", "Nhà gia công (NGC)"],
@@ -1199,10 +1294,25 @@ elif st.session_state.active_page == nav_options[3]:
         },
         key="edit_dt"
     )
+    edited_dt["Chọn"] = edited_dt["Chọn"].fillna(False).astype(bool)
 
-    if st.button("💾 Lưu Danh Sách Đối Tác", type="primary", use_container_width=True):
-        with st.spinner("Đang lưu..."):
-            save_data(edited_dt.dropna(subset=["Tên đối tác"]), "wanchi_doitac")
-        st.success("✅ Đã cập nhật danh sách đối tác!")
-        time.sleep(1)
-        st.rerun()
+    b_dt1, b_dt2 = st.columns(2)
+    with b_dt1:
+        if st.button("💾 Lưu Danh Sách Đối Tác", type="primary", use_container_width=True):
+            with st.spinner("Đang lưu..."):
+                df_dt_save = edited_dt.drop(columns=["Chọn"]).dropna(subset=["Tên đối tác"])
+                save_data(df_dt_save, "wanchi_doitac")
+            st.success("✅ Đã cập nhật danh sách đối tác!")
+            time.sleep(1)
+            st.rerun()
+    with b_dt2:
+        if st.button("🗑️ Xóa Dòng Đã Chọn", use_container_width=True, key="del_dt"):
+            if not edited_dt["Chọn"].any():
+                st.warning("⚠️ Vui lòng tick vào cột 'Chọn' ở ít nhất 1 đối tác cần xóa.")
+            else:
+                with st.spinner("Đang xóa đối tác đã chọn..."):
+                    df_dt_rem = edited_dt[edited_dt["Chọn"] == False].drop(columns=["Chọn"]).dropna(subset=["Tên đối tác"])
+                    save_data(df_dt_rem, "wanchi_doitac")
+                st.success("✅ Đã xóa các đối tác đã chọn!")
+                time.sleep(1)
+                st.rerun()
