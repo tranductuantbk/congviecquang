@@ -13,14 +13,16 @@ if not st.session_state.get("logged_in", False):
     st.stop()
 
 # ==========================================
-# CSS TỐI ƯU GIAO DIỆN GỌN ĐẸP, CHỐNG CHE CHỮ
+# CSS TỐI ƯU GIAO DIỆN RỘNG RÃI, KHÔNG KÉO NGANG
 # ==========================================
 st.markdown("""
 <style>
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
-        max-width: 1200px;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+        max-width: 98%;
     }
     div[data-testid="stMetric"] {
         background-color: rgba(128, 128, 128, 0.08);
@@ -107,13 +109,12 @@ def convert_pdf_to_png(pdf_bytes):
 
 def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None):
     df_export = df.copy()
-    # Làm sạch tên cột hiển thị khi xuất báo cáo (bỏ chữ A, B, C)
     df_export = df_export.rename(columns={
         "Tổng Nguyên Vật Liệu (A)": "Nguyên Vật Liệu",
         "Tổng Gia Công (B)": "Gia Công",
         "Tổng Vật Tư (C)": "Vật Tư"
     })
-    for drop_col in ["Ráp khuôn hoàn chỉnh", "Mã khuôn"]:
+    for drop_col in ["Ráp khuôn hoàn chỉnh", "Mã khuôn", "Chi tiết công đoạn"]:
         if drop_col in df_export.columns:
             df_export = df_export.drop(columns=[drop_col])
 
@@ -313,7 +314,7 @@ def export_pdf(df, title, ma_khuon_str=None, khach_hang_str=None, dvgc_str=None)
     return pdf_bytes
 
 # ==========================================
-# HÀM ĐỌC / GHI DATABASE & ĐỒNG BỘ
+# HÀM ĐỌC / GHI DATABASE & LỌC DÒNG KHỞI TẠO
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=86400)
 def fetch_data_from_db(table_name):
@@ -337,6 +338,42 @@ def load_data(table_name, columns):
         if col not in df.columns:
             df[col] = None
     return df
+
+def filter_out_init_rows(df):
+    """Loại bỏ các dòng 'Khởi tạo khuôn' khỏi danh sách chi phí (NVL, Gia công, Vật tư)"""
+    if df.empty:
+        return df.copy()
+    mask = pd.Series(False, index=df.index)
+    for col in ["Tên NVL", "Tên linh kiện", "Nhà cung cấp NVL", "Đơn vị gia công"]:
+        if col in df.columns:
+            mask |= df[col].astype(str).str.strip().str.lower().str.contains("khởi tạo khuôn", na=False)
+    return df[~mask].copy()
+
+def summarize_gc_stages(df_gc_in, stages):
+    """Tạo cột tóm tắt các công đoạn có phát sinh tiền để hiển thị gọn không cần kéo ngang"""
+    short_names = {
+        "Cắt dây": "Cắt dây",
+        "Xung điện (EDM)": "EDM",
+        "Phay CNC": "CNC",
+        "Nhiệt Luyện": "Nhiệt luyện",
+        "Đánh bóng": "Đánh bóng",
+        "Tạo Nhám hoa văn": "Tạo nhám",
+        "Dọn phôi": "Dọn phôi",
+        "Ráp khuôn hoàn chỉnh": "Ráp khuôn"
+    }
+    summaries = []
+    for _, row in df_gc_in.iterrows():
+        parts = []
+        for stg in stages:
+            if stg in df_gc_in.columns:
+                try:
+                    val = float(row[stg])
+                    if val > 0:
+                        parts.append(f"{short_names.get(stg, stg)}: {val:,.0f}")
+                except Exception:
+                    pass
+        summaries.append(" • ".join(parts) if parts else "—")
+    return summaries
 
 def append_data(new_row_dict, table_name, df_current):
     if not st.session_state.get("db_load_success", False):
@@ -435,7 +472,7 @@ def sync_all_molds_to_summary(list_molds, df_nvl, df_gc, df_vt, df_sum):
     save_data(pd.DataFrame(rows), "wanchi_d")
 
 def merge_filtered_edits(df_full, edited_filtered, filter_mold):
-    clean_edited = edited_filtered.drop(columns=["Chọn"], errors="ignore").copy()
+    clean_edited = edited_filtered.drop(columns=["Chọn", "Chi tiết công đoạn"], errors="ignore").copy()
     if filter_mold == "Tất cả":
         return clean_edited
     if "Mã khuôn" in clean_edited.columns:
@@ -453,7 +490,7 @@ def partner_selector(label, partner_list, key_prefix):
         return ""
     return selected
 
-def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_ref, include_vendor=False):
+def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_raw_ref, include_vendor=False):
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🖼️ Xuất ảnh các dòng đã chọn", use_container_width=True, key=f"btn_{state_key}"):
@@ -471,9 +508,9 @@ def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_ref
                         dvgc_str = uv[0] if len(uv) == 1 else None
 
                     kh_str = None
-                    if mold_str != "NHIỀU MÃ KHUÔN" and not df_nvl_ref.empty:
+                    if mold_str != "NHIỀU MÃ KHUÔN" and not df_nvl_raw_ref.empty:
                         try:
-                            row_kh = df_nvl_ref[(df_nvl_ref["Mã khuôn"] == mold_str) & (df_nvl_ref["Tên NVL"] == "Khởi tạo khuôn")]
+                            row_kh = df_nvl_raw_ref[(df_nvl_raw_ref["Mã khuôn"] == mold_str) & (df_nvl_raw_ref["Tên NVL"] == "Khởi tạo khuôn")]
                             if not row_kh.empty:
                                 raw = str(row_kh.iloc[0]["Nhà cung cấp NVL"])
                                 kh_str = raw[4:] if raw.startswith("KH: ") else raw.strip()
@@ -481,7 +518,7 @@ def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_ref
                             pass
 
                     pdf_bytes = export_pdf(
-                        selected.drop(columns=["Chọn"], errors="ignore"),
+                        selected.drop(columns=["Chọn", "Chi tiết công đoạn"], errors="ignore"),
                         title=title,
                         ma_khuon_str=mold_str if mold_str != "NHIỀU MÃ KHUÔN" else None,
                         khach_hang_str=kh_str,
@@ -503,11 +540,12 @@ def render_export_image_bar(edited_df, title, file_prefix, state_key, df_nvl_ref
             )
 
 # ==========================================
-# TẢI DỮ LIỆU TỪ DATABASE (GIỮ NGUYÊN CẤU TRÚC GỐC)
+# TẢI DỮ LIỆU TỪ DATABASE (LỌC BỎ DÒNG KHỞI TẠO Ở CHI PHÍ)
 # ==========================================
 cols_nvl = ["Ngày", "Nhà cung cấp NVL", "Mã khuôn", "Tên NVL", "Quy cách", "Số lượng", "Đơn giá", "Tổng tiền"]
-df_nvl = load_data("wanchi_a", cols_nvl)
-df_nvl = df_nvl.loc[:, ~df_nvl.columns.duplicated()]
+df_nvl_raw = load_data("wanchi_a", cols_nvl)
+df_nvl_raw = df_nvl_raw.loc[:, ~df_nvl_raw.columns.duplicated()]
+df_nvl = filter_out_init_rows(df_nvl_raw)
 
 cols_gc = [
     "Ngày", "Đơn vị gia công", "Mã khuôn", "Cắt dây", "Xung điện (EDM)", "Phay CNC",
@@ -517,18 +555,20 @@ gc_stages = [
     "Cắt dây", "Xung điện (EDM)", "Phay CNC", "Nhiệt Luyện",
     "Đánh bóng", "Tạo Nhám hoa văn", "Dọn phôi", "Ráp khuôn hoàn chỉnh"
 ]
-df_gc = load_data("wanchi_b", cols_gc)
+df_gc_raw = load_data("wanchi_b", cols_gc)
 for old_col in ["Đơn giá", "Cụm khuôn hoàn chỉnh", "Ráp khuôn hoàn thiện"]:
-    if old_col in df_gc.columns:
-        df_gc.rename(columns={old_col: "Ráp khuôn hoàn chỉnh"}, inplace=True)
-df_gc = df_gc.loc[:, ~df_gc.columns.duplicated()]
-if "Dọn phôi" not in df_gc.columns:
-    df_gc["Dọn phôi"] = 0
-df_gc = df_gc[[c for c in cols_gc if c in df_gc.columns]]
+    if old_col in df_gc_raw.columns:
+        df_gc_raw.rename(columns={old_col: "Ráp khuôn hoàn chỉnh"}, inplace=True)
+df_gc_raw = df_gc_raw.loc[:, ~df_gc_raw.columns.duplicated()]
+if "Dọn phôi" not in df_gc_raw.columns:
+    df_gc_raw["Dọn phôi"] = 0
+df_gc_raw = df_gc_raw[[c for c in cols_gc if c in df_gc_raw.columns]]
+df_gc = filter_out_init_rows(df_gc_raw)
 
 cols_vt = ["Ngày", "Nhà cung cấp vật tư", "Mã khuôn", "Tên linh kiện", "Đơn giá", "Tổng tiền"]
-df_vt = load_data("wanchi_c", cols_vt)
-df_vt = df_vt.loc[:, ~df_vt.columns.duplicated()]
+df_vt_raw = load_data("wanchi_c", cols_vt)
+df_vt_raw = df_vt_raw.loc[:, ~df_vt_raw.columns.duplicated()]
+df_vt = filter_out_init_rows(df_vt_raw)
 
 cols_sum = ["Ngày", "Mã khuôn", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "TỔNG CỘNG"]
 df_sum = load_data("wanchi_d", cols_sum)
@@ -542,9 +582,9 @@ cols_dt = ["Phân loại", "Tên đối tác"]
 df_dt = load_data("wanchi_doitac", cols_dt)
 df_dt = df_dt.loc[:, ~df_dt.columns.duplicated()]
 
-# Danh sách Master Khuôn & Đối tác
+# Danh sách Master Khuôn & Đối tác (khuôn mới khởi tạo chỉ lưu trong df_sum)
 all_molds_set = set()
-for df_tmp in [df_nvl, df_gc, df_vt, df_sum, df_dh]:
+for df_tmp in [df_sum, df_nvl, df_gc, df_vt, df_dh]:
     if not df_tmp.empty and "Mã khuôn" in df_tmp.columns:
         all_molds_set.update([str(x).strip() for x in df_tmp["Mã khuôn"].dropna().unique() if str(x).strip()])
 list_molds = sorted(list(all_molds_set))
@@ -564,25 +604,34 @@ list_ngc = sorted(list(set(
 list_ngc = [x for x in list_ngc if str(x).strip()]
 
 # ==========================================
-# CẤU HÌNH CỘT CHUẨN (GỌN, KHÔNG CHE CHỮ)
+# CẤU HÌNH CỘT & THỨ TỰ CỘT (ĐƯA SỐ TIỀN LÊN TRƯỚC)
 # ==========================================
+ORDER_SUM = ["Chọn", "Mã khuôn", "TỔNG CỘNG", "Tổng Nguyên Vật Liệu (A)", "Tổng Gia Công (B)", "Tổng Vật Tư (C)", "Ngày"]
+ORDER_NVL = ["Chọn", "Mã khuôn", "Tổng tiền", "Tên NVL", "Quy cách", "Số lượng", "Đơn giá", "Nhà cung cấp NVL", "Ngày"]
+ORDER_GC_COMPACT = ["Chọn", "Mã khuôn", "Tổng tiền", "Chi tiết công đoạn", "Đơn vị gia công", "Ngày"]
+ORDER_GC_FULL = ["Chọn", "Mã khuôn", "Tổng tiền", "Đơn vị gia công", "Ngày"] + gc_stages
+ORDER_VT = ["Chọn", "Mã khuôn", "Tổng tiền", "Tên linh kiện", "Đơn giá", "Nhà cung cấp vật tư", "Ngày"]
+ORDER_DH = ["Chọn", "Mã khuôn", "Tổng giá gia công", "Cọc đợt 1", "Còn nợ", "Đơn vị gia công", "Các mục gia công", "Thời gian nhận", "Thời gian bàn giao", "Ghi chú"]
+
 COL_CFG_NVL = {
     "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
-    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
-    "Nhà cung cấp NVL": st.column_config.TextColumn("Nhà cung cấp", width="medium"),
+    "Tổng tiền": st.column_config.NumberColumn("💰 Thành tiền", format="%,.0f", width="small"),
     "Tên NVL": st.column_config.TextColumn("Tên vật liệu", width="medium"),
-    "Quy cách": st.column_config.TextColumn("Quy cách", width="medium"),
+    "Quy cách": st.column_config.TextColumn("Quy cách", width="small"),
     "Số lượng": st.column_config.NumberColumn("SL", format="%.2f", width="small"),
     "Đơn giá": st.column_config.NumberColumn("Đơn giá", format="%,.0f", width="small"),
-    "Tổng tiền": st.column_config.NumberColumn("Thành tiền", format="%,.0f", width="medium"),
+    "Nhà cung cấp NVL": st.column_config.TextColumn("Nhà cung cấp", width="small"),
+    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
 }
 
 COL_CFG_GC = {
     "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
-    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
-    "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="medium"),
+    "Tổng tiền": st.column_config.NumberColumn("💰 Tổng tiền", format="%,.0f", width="small"),
+    "Chi tiết công đoạn": st.column_config.TextColumn("Chi tiết công đoạn (VNĐ)", width="large"),
+    "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="small"),
+    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Cắt dây": st.column_config.NumberColumn("Cắt dây", format="%,.0f", width="small"),
     "Xung điện (EDM)": st.column_config.NumberColumn("EDM", format="%,.0f", width="small"),
     "Phay CNC": st.column_config.NumberColumn("Phay CNC", format="%,.0f", width="small"),
@@ -591,40 +640,39 @@ COL_CFG_GC = {
     "Tạo Nhám hoa văn": st.column_config.NumberColumn("Tạo nhám", format="%,.0f", width="small"),
     "Dọn phôi": st.column_config.NumberColumn("Dọn phôi", format="%,.0f", width="small"),
     "Ráp khuôn hoàn chỉnh": st.column_config.NumberColumn("Ráp khuôn", format="%,.0f", width="small"),
-    "Tổng tiền": st.column_config.NumberColumn("Tổng tiền", format="%,.0f", width="medium"),
 }
 
 COL_CFG_VT = {
     "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
-    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
-    "Nhà cung cấp vật tư": st.column_config.TextColumn("Nhà cung cấp", width="medium"),
+    "Tổng tiền": st.column_config.NumberColumn("💰 Thành tiền", format="%,.0f", width="small"),
     "Tên linh kiện": st.column_config.TextColumn("Tên linh kiện", width="large"),
     "Đơn giá": st.column_config.NumberColumn("Đơn giá", format="%,.0f", width="small"),
-    "Tổng tiền": st.column_config.NumberColumn("Thành tiền", format="%,.0f", width="medium"),
+    "Nhà cung cấp vật tư": st.column_config.TextColumn("Nhà cung cấp", width="medium"),
+    "Ngày": st.column_config.TextColumn("Ngày", width="small"),
 }
 
 COL_CFG_SUM = {
     "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
-    "Ngày": st.column_config.TextColumn("Ngày tạo", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="medium"),
-    "Tổng Nguyên Vật Liệu (A)": st.column_config.NumberColumn("Nguyên vật liệu", format="%,.0f", width="medium"),
-    "Tổng Gia Công (B)": st.column_config.NumberColumn("Gia công", format="%,.0f", width="medium"),
-    "Tổng Vật Tư (C)": st.column_config.NumberColumn("Vật tư", format="%,.0f", width="medium"),
-    "TỔNG CỘNG": st.column_config.NumberColumn("Tổng cộng", format="%,.0f", width="medium"),
+    "TỔNG CỘNG": st.column_config.NumberColumn("💰 Tổng cộng", format="%,.0f", width="medium"),
+    "Tổng Nguyên Vật Liệu (A)": st.column_config.NumberColumn("Nguyên vật liệu", format="%,.0f", width="small"),
+    "Tổng Gia Công (B)": st.column_config.NumberColumn("Gia công", format="%,.0f", width="small"),
+    "Tổng Vật Tư (C)": st.column_config.NumberColumn("Vật tư", format="%,.0f", width="small"),
+    "Ngày": st.column_config.TextColumn("Ngày tạo", width="small"),
 }
 
 COL_CFG_DH = {
     "Chọn": st.column_config.CheckboxColumn("Chọn", help="Tick để Xóa hoặc Xuất ảnh", width="small"),
     "Mã khuôn": st.column_config.TextColumn("Mã khuôn", width="small"),
-    "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="medium"),
-    "Các mục gia công": st.column_config.TextColumn("Hạng mục", width="large"),
+    "Tổng giá gia công": st.column_config.NumberColumn("💰 Tổng giá", format="%,.0f", width="small"),
+    "Cọc đợt 1": st.column_config.NumberColumn("Đã cọc", format="%,.0f", width="small"),
+    "Còn nợ": st.column_config.NumberColumn("⚠️ Còn nợ", format="%,.0f", width="small"),
+    "Đơn vị gia công": st.column_config.TextColumn("ĐV gia công", width="small"),
+    "Các mục gia công": st.column_config.TextColumn("Hạng mục", width="medium"),
     "Thời gian nhận": st.column_config.TextColumn("Ngày nhận", width="small"),
     "Thời gian bàn giao": st.column_config.TextColumn("Ngày giao", width="small"),
-    "Tổng giá gia công": st.column_config.NumberColumn("Tổng giá", format="%,.0f", width="small"),
-    "Cọc đợt 1": st.column_config.NumberColumn("Đã cọc", format="%,.0f", width="small"),
-    "Còn nợ": st.column_config.NumberColumn("Còn nợ", format="%,.0f", width="small"),
-    "Ghi chú": st.column_config.TextColumn("Ghi chú", width="medium"),
+    "Ghi chú": st.column_config.TextColumn("Ghi chú", width="small"),
 }
 
 # ==========================================
@@ -665,7 +713,7 @@ if st.session_state.active_page == nav_options[0]:
     k1.metric("📦 Tổng số dự án khuôn", f"{len(list_molds)} khuôn")
     k2.metric("💵 Tổng chi phí toàn xưởng", f"{tong_all:,.0f} đ")
 
-    # --- Khối 2: Tạo khuôn mới (dọc, thoáng) ---
+    # --- Khối 2: Tạo khuôn mới (chỉ ghi danh vào bảng Tổng hợp, không ghi vào chi phí) ---
     with st.expander("➕ Tạo Dự Án Khuôn Mới", expanded=(len(list_molds) == 0)):
         with st.form("form_new_mold", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -687,7 +735,7 @@ if st.session_state.active_page == nav_options[0]:
                             "Tổng Vật Tư (C)": 0,
                             "TỔNG CỘNG": 0
                         }, "wanchi_d", df_sum)
-                    st.success(f"🎉 Đã khởi tạo khuôn **{mk_clean}** thành công!")
+                    st.success(f"🎉 Đã khởi tạo khuôn **{mk_clean}** thành công (chỉ lưu ở Hồ sơ khuôn, không làm rác danh sách chi phí)!")
                     time.sleep(1)
                     st.rerun()
 
@@ -703,7 +751,6 @@ if st.session_state.active_page == nav_options[0]:
         s_vt = safe_num_sum(df_vt, selected_mold)
         s_tot = s_nvl + s_gc + s_vt
 
-        # Bảng tổng kết theo CHIỀU DỌC (Hạng mục | Chi phí | Tỷ trọng)
         def pct(val):
             return f"{(val / s_tot * 100):.1f}%" if s_tot > 0 else "0.0%"
 
@@ -725,11 +772,17 @@ if st.session_state.active_page == nav_options[0]:
             }
         )
 
-        # Chi tiết từng phần bên dưới theo chiều dọc (mở ra xem ngay)
+        # Chi tiết từng phần bên dưới (số tiền nằm đầu tiên, không kéo ngang)
         with st.expander(f"🧱 Chi tiết Nguyên Vật Liệu ({len(df_nvl[df_nvl['Mã khuôn'] == selected_mold])} dòng)"):
             sub_nvl = prep_numeric_cols(df_nvl[df_nvl["Mã khuôn"] == selected_mold], ["Số lượng", "Đơn giá", "Tổng tiền"])
             if not sub_nvl.empty:
-                st.dataframe(sub_nvl, use_container_width=True, hide_index=True, column_config=COL_CFG_NVL)
+                st.dataframe(
+                    sub_nvl,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_order=[c for c in ORDER_NVL if c not in ("Chọn", "Mã khuôn")],
+                    column_config=COL_CFG_NVL
+                )
             else:
                 st.info("Chưa có dữ liệu Nguyên vật liệu.")
 
@@ -748,22 +801,41 @@ if st.session_state.active_page == nav_options[0]:
                             "Chi phí (VNĐ)": st.column_config.NumberColumn("Chi phí (VNĐ)", format="%,.0f", width="medium"),
                         }
                     )
-                st.caption("Bảng chi tiết từng đợt gia công:")
-                st.dataframe(sub_gc, use_container_width=True, hide_index=True, column_config=COL_CFG_GC)
+                sub_gc["Chi tiết công đoạn"] = summarize_gc_stages(sub_gc, gc_stages)
+                st.caption("Chi tiết từng đợt gia công:")
+                st.dataframe(
+                    sub_gc,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_order=["Tổng tiền", "Chi tiết công đoạn", "Đơn vị gia công", "Ngày"],
+                    column_config=COL_CFG_GC
+                )
             else:
                 st.info("Chưa có dữ liệu Gia công.")
 
         with st.expander(f"🔩 Chi tiết Vật Tư & Linh Kiện ({len(df_vt[df_vt['Mã khuôn'] == selected_mold])} dòng)"):
             sub_vt = prep_numeric_cols(df_vt[df_vt["Mã khuôn"] == selected_mold], ["Đơn giá", "Tổng tiền"])
             if not sub_vt.empty:
-                st.dataframe(sub_vt, use_container_width=True, hide_index=True, column_config=COL_CFG_VT)
+                st.dataframe(
+                    sub_vt,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_order=[c for c in ORDER_VT if c not in ("Chọn", "Mã khuôn")],
+                    column_config=COL_CFG_VT
+                )
             else:
                 st.info("Chưa có dữ liệu Vật tư.")
 
         with st.expander(f"📦 Đơn Hàng Gia Công Liên Quan ({len(df_dh[df_dh['Mã khuôn'] == selected_mold])} đơn)"):
             sub_dh = prep_numeric_cols(df_dh[df_dh["Mã khuôn"] == selected_mold], ["Tổng giá gia công", "Cọc đợt 1", "Còn nợ"])
             if not sub_dh.empty:
-                st.dataframe(sub_dh, use_container_width=True, hide_index=True, column_config=COL_CFG_DH)
+                st.dataframe(
+                    sub_dh,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_order=[c for c in ORDER_DH if c not in ("Chọn", "Mã khuôn")],
+                    column_config=COL_CFG_DH
+                )
             else:
                 st.info("Chưa có đơn hàng gia công cho khuôn này.")
     else:
@@ -788,6 +860,7 @@ if st.session_state.active_page == nav_options[0]:
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
+        column_order=ORDER_SUM,
         column_config=COL_CFG_SUM,
         key="edit_sum"
     )
@@ -813,13 +886,12 @@ if st.session_state.active_page == nav_options[0]:
                 time.sleep(1)
                 st.rerun()
 
-    render_export_image_bar(edited_sum, "BẢNG TỔNG HỢP CHI PHÍ KHUÔN", "TongHop", "sum_page", df_nvl)
+    render_export_image_bar(edited_sum, "BẢNG TỔNG HỢP CHI PHÍ KHUÔN", "TongHop", "sum_page", df_nvl_raw)
 
 # ==============================================================================
 # TRANG 2: NHẬP & SỔ CHI PHÍ (NGUYÊN VẬT LIỆU | GIA CÔNG | VẬT TƯ)
 # ==============================================================================
 elif st.session_state.active_page == nav_options[1]:
-    # Chọn mã khuôn thao tác dùng chung
     filter_mold = st.selectbox(
         "🎯 Chọn Mã Khuôn đang thao tác (để lọc bảng và điền sẵn vào ô nhập):",
         ["Tất cả"] + list_molds,
@@ -888,6 +960,7 @@ elif st.session_state.active_page == nav_options[1]:
             num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
+            column_order=ORDER_NVL,
             column_config=COL_CFG_NVL,
             key="edit_nvl"
         )
@@ -923,9 +996,9 @@ elif st.session_state.active_page == nav_options[1]:
                     time.sleep(1)
                     st.rerun()
 
-        render_export_image_bar(edited_nvl, "BÁO CÁO NGUYÊN VẬT LIỆU", "NVL", "exp_nvl", df_nvl)
+        render_export_image_bar(edited_nvl, "BÁO CÁO NGUYÊN VẬT LIỆU", "NVL", "exp_nvl", df_nvl_raw)
 
-    # ---------------- TAB 2: GIA CÔNG (NHẬP BẰNG BẢNG DỌC 2 CỘT) ----------------
+    # ---------------- TAB 2: GIA CÔNG (NHẬP DỌC + BẢNG GỌN KHÔNG KÉO NGANG) ----------------
     with tab_gc:
         with st.expander("➕ Thêm Chi Phí Gia Công Mới", expanded=False):
             r1c1, r1c2 = st.columns(2)
@@ -997,9 +1070,17 @@ elif st.session_state.active_page == nav_options[1]:
                     time.sleep(1)
                     st.rerun()
 
-        st.subheader("Danh Sách Chi Phí Gia Công")
+        gc_h1, gc_h2 = st.columns([2, 2])
+        gc_h1.subheader("Danh Sách Chi Phí Gia Công")
+        compact_gc = gc_h2.toggle(
+            "👁️ Chế độ gọn (không cần kéo ngang)",
+            value=True,
+            help="Tắt công tắc này nếu bạn muốn mở rộng đầy đủ 8 cột công đoạn để sửa lẻ từng ô."
+        )
+
         df_gc_view = df_gc[df_gc["Mã khuôn"] == filter_mold].copy() if filter_mold != "Tất cả" else df_gc.copy()
         df_gc_view = prep_numeric_cols(df_gc_view, gc_stages + ["Tổng tiền"])
+        df_gc_view["Chi tiết công đoạn"] = summarize_gc_stages(df_gc_view, gc_stages)
         df_gc_view.insert(0, "Chọn", False)
 
         edited_gc = st.data_editor(
@@ -1007,6 +1088,8 @@ elif st.session_state.active_page == nav_options[1]:
             num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
+            disabled=["Chi tiết công đoạn"],
+            column_order=ORDER_GC_COMPACT if compact_gc else ORDER_GC_FULL,
             column_config=COL_CFG_GC,
             key="edit_gc"
         )
@@ -1042,7 +1125,7 @@ elif st.session_state.active_page == nav_options[1]:
                     time.sleep(1)
                     st.rerun()
 
-        render_export_image_bar(edited_gc, "BÁO CÁO CHI PHÍ GIA CÔNG", "GiaCong", "exp_gc", df_nvl)
+        render_export_image_bar(edited_gc, "BÁO CÁO CHI PHÍ GIA CÔNG", "GiaCong", "exp_gc", df_nvl_raw)
 
     # ---------------- TAB 3: VẬT TƯ & LINH KIỆN ----------------
     with tab_vt:
@@ -1098,6 +1181,7 @@ elif st.session_state.active_page == nav_options[1]:
             num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
+            column_order=ORDER_VT,
             column_config=COL_CFG_VT,
             key="edit_vt"
         )
@@ -1133,7 +1217,7 @@ elif st.session_state.active_page == nav_options[1]:
                     time.sleep(1)
                     st.rerun()
 
-        render_export_image_bar(edited_vt, "BÁO CÁO VẬT TƯ KHUÔN MẪU", "VatTu", "exp_vt", df_nvl)
+        render_export_image_bar(edited_vt, "BÁO CÁO VẬT TƯ KHUÔN MẪU", "VatTu", "exp_vt", df_nvl_raw)
 
 # ==============================================================================
 # TRANG 3: ĐƠN HÀNG GIA CÔNG (TẠO ĐƠN + THEO DÕI CÔNG NỢ)
@@ -1212,6 +1296,7 @@ elif st.session_state.active_page == nav_options[2]:
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
+        column_order=ORDER_DH,
         column_config=COL_CFG_DH,
         key="edit_dh"
     )
@@ -1249,7 +1334,7 @@ elif st.session_state.active_page == nav_options[2]:
                 time.sleep(1)
                 st.rerun()
 
-    render_export_image_bar(edited_dh, "ĐƠN HÀNG GIA CÔNG", "DonHang", "exp_dh", df_nvl, include_vendor=True)
+    render_export_image_bar(edited_dh, "ĐƠN HÀNG GIA CÔNG", "DonHang", "exp_dh", df_nvl_raw, include_vendor=True)
 
 # ==============================================================================
 # TRANG 4: DANH MỤC ĐỐI TÁC (BỐ CỤC DỌC GỌN GÀNG)
