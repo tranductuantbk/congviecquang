@@ -48,6 +48,32 @@ st.markdown("""
         font-size: 0.88rem;
         margin-top: 4px;
     }
+    .cost-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+        margin-top: 6px;
+    }
+    .cost-table th, .cost-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.22);
+    }
+    .cost-table th {
+        background-color: rgba(128, 128, 128, 0.12);
+        font-weight: 600;
+        font-size: 0.86rem;
+    }
+    .cost-table tr.total-row td {
+        background-color: rgba(128, 128, 128, 0.10);
+        font-weight: 700;
+        border-top: 2px solid rgba(128, 128, 128, 0.35);
+        border-bottom: none;
+    }
+    .cost-table .num {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -195,7 +221,7 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
         ten_sp = col_info2.text_input("2. Tên Sản Phẩm", placeholder="Nhập tên sản phẩm gia công...", key="gc_ten_in")
 
     # --- KHỐI 2: CHIA 2 CỘT (TRÁI: NHẬP THÔNG SỐ | PHẢI: PHÂN TÍCH & BÁO GIÁ) ---
-    col_input, col_result = st.columns([1.25, 1], gap="medium")
+    col_input, col_result = st.columns([1.15, 1], gap="medium")
 
     with col_input:
         st.markdown("#### 📥 Thông Số Đầu Vào")
@@ -240,33 +266,47 @@ if st.session_state["current_tab_gc"] == "🧮 1. TÍNH TOÁN & NHẬP LIỆU":
     with col_result:
         st.markdown("#### 📊 Phân Tích Giá Thành & Báo Giá")
 
-        # Bảng cơ cấu giá thành (có tỷ trọng %)
+        # Bảng cơ cấu giá thành thu gọn, tự co giãn vừa khung (không bị che giá / không kéo ngang)
         with st.container(border=True):
             st.markdown("**Cơ cấu Giá vốn (1 sản phẩm)**")
 
             def fmt_pct(val):
                 return f"{(val / gvhb * 100):.1f}%" if gvhb > 0 else "0.0%"
 
-            df_summary = pd.DataFrame({
-                "Thành phần": [
-                    "1. Nguyên vật liệu",
-                    "2. Máy sản xuất",
-                    "3. Chi phí khác (Bao bì, PK, Phụ gia)",
-                    "TỔNG GIÁ VỐN"
-                ],
-                "Thành tiền (VNĐ)": [cp_nvl_1sp, cp_may_1sp, cp_khac, gvhb],
-                "Tỷ trọng": [fmt_pct(cp_nvl_1sp), fmt_pct(cp_may_1sp), fmt_pct(cp_khac), "100.0%" if gvhb > 0 else "0.0%"]
-            })
-            st.dataframe(
-                df_summary,
-                hide_index=True,
-                use_container_width=True,
-                column_config={
-                    "Thành phần": st.column_config.TextColumn("Thành phần chi phí", width="large"),
-                    "Thành tiền (VNĐ)": st.column_config.NumberColumn("Thành tiền (đ)", format="%,.0f", width="medium"),
-                    "Tỷ trọng": st.column_config.TextColumn("Tỷ trọng", width="small"),
-                }
-            )
+            tong_pct = "100.0%" if gvhb > 0 else "0.0%"
+            st.markdown(f"""
+            <table class="cost-table">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Thành phần</th>
+                        <th class="num">Thành tiền</th>
+                        <th class="num">Tỷ trọng</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1. Nguyên vật liệu</td>
+                        <td class="num">{cp_nvl_1sp:,.0f} đ</td>
+                        <td class="num">{fmt_pct(cp_nvl_1sp)}</td>
+                    </tr>
+                    <tr>
+                        <td>2. Máy sản xuất</td>
+                        <td class="num">{cp_may_1sp:,.0f} đ</td>
+                        <td class="num">{fmt_pct(cp_may_1sp)}</td>
+                    </tr>
+                    <tr>
+                        <td>3. Chi phí khác</td>
+                        <td class="num">{cp_khac:,.0f} đ</td>
+                        <td class="num">{fmt_pct(cp_khac)}</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td>TỔNG GIÁ VỐN</td>
+                        <td class="num">{gvhb:,.0f} đ</td>
+                        <td class="num">{tong_pct}</td>
+                    </tr>
+                </tbody>
+            </table>
+            """, unsafe_allow_html=True)
 
         # Khối hệ số & kết quả báo giá
         with st.container(border=True):
