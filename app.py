@@ -17,7 +17,7 @@ def login_screen():
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<h1 style='text-align: center; margin-top: 50px;'>🔒 HỆ THỐNG WANCHI</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 50px;'>🔒 HỆ THỐNG QUANG</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>Vui lòng nhập mật khẩu để vào phần mềm</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
